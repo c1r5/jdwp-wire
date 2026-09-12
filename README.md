@@ -11,4 +11,4 @@ go build -o jdt ./cmd/jdt
 ./jdt --help
 ```
 
-Product contract: [`CONTEXT.md`](CONTEXT.md). Repo workflow: [`development-rules.md`](development-rules.md).
+Product contract: [`AGENTS.md`](AGENTS.md). Repo workflow: [`.grok/rules/development-rules.md`](.grok/rules/development-rules.md).

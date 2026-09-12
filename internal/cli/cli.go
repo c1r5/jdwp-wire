@@ -22,7 +22,7 @@ Usage:
   jdt --help
   jdt --version
 
-Commands are not wired yet. See CONTEXT.md for the target CLI.
+Commands are not wired yet. See AGENTS.md for the target CLI.
 `
 
 // Run executes the CLI with process stdio.
