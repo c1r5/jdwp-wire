@@ -12,8 +12,10 @@ Ler `CONTEXT.md` antes de abrir issue.
 
 ```
 jdwp-wire/
-  CONTEXT.md
-  development-rules.md
+  CONTEXT.md              # produto (canônico)
+  AGENTS.md               # symlink → CONTEXT.md (auto-load Grok/Codex)
+  development-rules.md    # fluxo (canônico)
+  .grok/rules/development-rules.md  # symlink → este arquivo
   README.md
   go.mod
   go.sum
