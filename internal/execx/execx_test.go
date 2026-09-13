@@ -150,3 +150,38 @@ func TestRun_DeadlineExceeded(t *testing.T) {
 		t.Fatalf("err = %v, want context.DeadlineExceeded", err)
 	}
 }
+
+func TestRun_CancelKillsProcessTree(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := Exec{}.Run(ctx, "/bin/sh", "-c", "/bin/sleep 41 & wait")
+		done <- err
+	}()
+
+	time.Sleep(100 * time.Millisecond)
+	cancel()
+
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("err = %v, want context.Canceled", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Run did not return after cancel; child likely held stdout/stderr")
+	}
+
+	out, err := exec.Command("ps", "-eo", "args=").Output()
+	if err != nil {
+		t.Fatalf("ps: %v", err)
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		args := strings.TrimSpace(line)
+		if args == "/bin/sleep 41" {
+			t.Fatalf("child still alive: %q", args)
+		}
+	}
+}

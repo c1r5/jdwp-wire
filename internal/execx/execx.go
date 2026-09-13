@@ -65,6 +65,7 @@ func (Exec) Run(ctx context.Context, name string, args ...string) (Result, error
 	}
 
 	cmd := exec.CommandContext(ctx, name, args...)
+	configureKill(cmd)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
