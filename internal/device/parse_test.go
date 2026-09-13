@@ -65,6 +65,16 @@ func TestParseDevicesNoHeader(t *testing.T) {
 	assertDevices(t, got, want)
 }
 
+func TestParseDevicesSkipsDaemonBanner(t *testing.T) {
+	t.Parallel()
+	got := parseDevices("* daemon not running; starting now at tcp:5037 *\n* daemon started successfully *\nList of devices attached\nemulator-5554          device\n")
+	want := []Device{{Serial: "emulator-5554", State: StateDevice, Kind: KindEmulator}}
+	assertDevices(t, got, want)
+	if len(parseDevices("* daemon started successfully *\n")) != 0 {
+		t.Fatal("banner-only stdout should parse as empty")
+	}
+}
+
 func assertDevices(t *testing.T, got, want []Device) {
 	t.Helper()
 	if len(got) != len(want) {

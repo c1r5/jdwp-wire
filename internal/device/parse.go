@@ -16,6 +16,9 @@ func parseDevices(stdout string) []Device {
 			continue
 		}
 		serial := fields[0]
+		if serial == "*" || strings.HasPrefix(serial, "*") {
+			continue
+		}
 		out = append(out, Device{
 			Serial: serial,
 			State:  parseState(fields[1]),
