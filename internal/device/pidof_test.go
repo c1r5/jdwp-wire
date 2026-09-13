@@ -138,6 +138,35 @@ func TestADBPidofUsage(t *testing.T) {
 	}
 }
 
+func TestADBPidofPSExitKeepsPidof(t *testing.T) {
+	t.Parallel()
+	r := &execx.Fake{RunFn: func(ctx context.Context, name string, args ...string) (execx.Result, error) {
+		if args[3] == "pidof" {
+			return execx.Result{Stdout: "4321\n"}, nil
+		}
+		return execx.Result{ExitCode: 1, Stderr: "bad ps"}, execx.ErrExit
+	}}
+	got, err := NewADB(r).Pidof(withTimeout(t), "emu", "com.alvo")
+	if err != nil {
+		t.Fatalf("ps ErrExit should not fail Pidof, got %v", err)
+	}
+	assertProcs(t, got, []Process{{PID: 4321, Package: "com.alvo"}})
+}
+
+func TestADBPidofBothExitEmpty(t *testing.T) {
+	t.Parallel()
+	r := &execx.Fake{RunFn: func(ctx context.Context, name string, args ...string) (execx.Result, error) {
+		return execx.Result{ExitCode: 1}, execx.ErrExit
+	}}
+	got, err := NewADB(r).Pidof(withTimeout(t), "emu", "com.missing")
+	if err != nil {
+		t.Fatalf("dead app with ps ErrExit: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("got %#v, want empty", got)
+	}
+}
+
 func TestADBPidofToolMissing(t *testing.T) {
 	t.Parallel()
 	r := &execx.Fake{RunFn: func(ctx context.Context, name string, args ...string) (execx.Result, error) {

@@ -63,10 +63,16 @@ func (a *ADB) Pidof(ctx context.Context, serial, pkg string) ([]Process, error) 
 	}
 
 	res, err = a.r.Run(ctx, "adb", "-s", serial, "shell", "ps", "-A")
-	if err != nil {
+	var fromPS []Process
+	switch {
+	case err == nil:
+		fromPS = parsePS(res.Stdout, pkg)
+	case errors.Is(err, execx.ErrExit):
+		// some images reject `ps -A`; keep pidof hits
+	default:
 		return nil, wrapADB("pidof", err)
 	}
-	return mergeProcesses(pkg, pids, parsePS(res.Stdout, pkg)), nil
+	return mergeProcesses(pkg, pids, fromPS), nil
 }
 
 func wrapADB(op string, err error) error {
