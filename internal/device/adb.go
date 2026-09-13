@@ -46,6 +46,29 @@ func (a *ADB) Resolve(ctx context.Context, serial string) (Device, error) {
 	return d, nil
 }
 
+func (a *ADB) Pidof(ctx context.Context, serial, pkg string) ([]Process, error) {
+	if serial == "" || pkg == "" {
+		return nil, fmt.Errorf("device: pidof: %w", ErrUsage)
+	}
+
+	res, err := a.r.Run(ctx, "adb", "-s", serial, "shell", "pidof", pkg)
+	var pids []int
+	switch {
+	case err == nil:
+		pids = parsePidof(res.Stdout)
+	case errors.Is(err, execx.ErrExit):
+		// dead / missing package: pidof exits 1
+	default:
+		return nil, wrapADB("pidof", err)
+	}
+
+	res, err = a.r.Run(ctx, "adb", "-s", serial, "shell", "ps", "-A")
+	if err != nil {
+		return nil, wrapADB("pidof", err)
+	}
+	return mergeProcesses(pkg, pids, parsePS(res.Stdout, pkg)), nil
+}
+
 func wrapADB(op string, err error) error {
 	if errors.Is(err, execx.ErrNotFound) {
 		return fmt.Errorf("device: %s: %w", op, fmt.Errorf("%w: adb", ErrToolMissing))
