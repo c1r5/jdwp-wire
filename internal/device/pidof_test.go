@@ -138,6 +138,43 @@ func TestADBPidofUsage(t *testing.T) {
 	}
 }
 
+func TestADBPidofPSFallbackPlain(t *testing.T) {
+	t.Parallel()
+	var psFlags []string
+	r := &execx.Fake{RunFn: func(ctx context.Context, name string, args ...string) (execx.Result, error) {
+		if args[3] == "pidof" {
+			return execx.Result{Stdout: "4321\n"}, nil
+		}
+		if args[3] != "ps" {
+			t.Fatalf("unexpected shell %v", args)
+		}
+		flag := ""
+		if len(args) >= 5 {
+			flag = args[4]
+		}
+		psFlags = append(psFlags, flag)
+		if flag == "-A" {
+			return execx.Result{ExitCode: 1, Stderr: "unrecognized option: A"}, execx.ErrExit
+		}
+		if flag != "" {
+			t.Fatalf("plain ps args %v", args)
+		}
+		return execx.Result{Stdout: psBusybox}, nil
+	}}
+	got, err := NewADB(r).Pidof(withTimeout(t), "emu", "com.alvo")
+	if err != nil {
+		t.Fatalf("err = %v", err)
+	}
+	if len(psFlags) != 2 || psFlags[0] != "-A" || psFlags[1] != "" {
+		t.Fatalf("ps flags = %v, want [-A] then plain", psFlags)
+	}
+	want := []Process{
+		{PID: 4321, Package: "com.alvo"},
+		{PID: 4400, Package: "com.alvo:id"},
+	}
+	assertProcs(t, got, want)
+}
+
 func TestADBPidofPSExitKeepsPidof(t *testing.T) {
 	t.Parallel()
 	r := &execx.Fake{RunFn: func(ctx context.Context, name string, args ...string) (execx.Result, error) {
