@@ -25,3 +25,4 @@ coverage.out
 /.grok
 /.rtk
 /spec-*.md
+/.agents
