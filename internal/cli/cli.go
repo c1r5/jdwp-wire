@@ -33,18 +33,27 @@ func Run(args []string) int {
 // RunWith executes the CLI against the given writers (tests).
 func RunWith(stdout, stderr io.Writer, args []string) int {
 	if len(args) == 0 {
-		fmt.Fprint(stdout, usage)
-		return ExitOK
+		return writeOK(stdout, usage)
 	}
 	switch args[0] {
 	case "-h", "--help", "help":
-		fmt.Fprint(stdout, usage)
-		return ExitOK
+		return writeOK(stdout, usage)
 	case "-v", "--version", "version":
-		fmt.Fprintln(stdout, "jdt", Version)
+		if _, err := fmt.Fprintln(stdout, "jdt", Version); err != nil {
+			return 1
+		}
 		return ExitOK
 	default:
-		fmt.Fprintf(stderr, "jdt: unknown command %q\n", args[0])
+		if _, err := fmt.Fprintf(stderr, "jdt: unknown command %q\n", args[0]); err != nil {
+			return 1
+		}
 		return ExitUsage
 	}
+}
+
+func writeOK(w io.Writer, s string) int {
+	if _, err := io.WriteString(w, s); err != nil {
+		return 1
+	}
+	return ExitOK
 }

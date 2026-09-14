@@ -2,9 +2,16 @@ package cli
 
 import (
 	"bytes"
+	"io"
 	"strings"
 	"testing"
 )
+
+type failWriter struct{}
+
+func (failWriter) Write([]byte) (int, error) {
+	return 0, io.ErrClosedPipe
+}
 
 func TestRunHelp(t *testing.T) {
 	t.Parallel()
@@ -47,5 +54,13 @@ func TestRunUnknownCommand(t *testing.T) {
 	}
 	if stdout.Len() != 0 {
 		t.Fatalf("unexpected stdout %q", stdout.String())
+	}
+}
+
+func TestRunWriteError(t *testing.T) {
+	t.Parallel()
+	code := RunWith(failWriter{}, io.Discard, []string{"--help"})
+	if code == ExitOK {
+		t.Fatalf("exit %d, want non-zero when stdout write fails", code)
 	}
 }
