@@ -14,6 +14,7 @@ Ler `AGENTS.md` antes de abrir issue.
 jdwp-wire/
   AGENTS.md
   .grok/rules/development-rules.md
+  .grok/rules/worktrees.md
   README.md
   go.mod
   go.sum
@@ -103,15 +104,21 @@ feat/device              # opcional: guarda-chuva, ou só os steps
 ### Paralelo
 
 Features **independentes** (sem import cruzado): worktrees, não stash-hopping.
+Contrato completo em `.grok/rules/worktrees.md`.
+
+Path **obrigatório**: `.worktrees/<tipo>/<slug>/` na raiz do clone — nunca irmão do repo.
 
 ```bash
-git worktree add ../jdwp-wire-targets feat/targets
-git worktree add ../jdwp-wire-project feat/project
+mkdir -p .worktrees/feat .worktrees/docs
+git worktree add .worktrees/feat/targets feat/targets
+git worktree add .worktrees/feat/project feat/project
+git worktree add .worktrees/docs/worktree-layout -b docs/worktree-layout
 ```
 
-- Um worktree por feat.
-- Path: irmão do repo, `jdwp-wire-<branch-slug>`.
-- Não reutilizar worktree pra outra feat sem `git worktree remove`.
+- `<tipo>` = prefixo da branch (`feat` `docs` `fix` `refactor` `chore` `spike`).
+- `<slug>` = resto da branch depois da barra.
+- Um worktree por tarefa. Não reutilizar sem `git worktree remove`.
+- `.worktrees/` é gitignored. `git check-ignore -q .worktrees` antes de criar.
 
 ---
 
@@ -221,6 +228,7 @@ Em todo PR / step:
 - keystore de produção
 - captura HAR com token vivo (anonimizar fixture)
 - `.jdt/` local
+- `.worktrees/` (checkouts isolados por tarefa)
 - binário `jdt` compilado
 
 `testdata/` só fixture mínimo próprio ou gerado.
@@ -242,7 +250,7 @@ Em todo PR / step:
 11. **Não commitar arquivo gerado pelo Studio** (`.idea` de verdade). `project` *escreve* um xml mínimo em `.jdt/`, versionamos só o *template* em `internal/project/testdata`.
 12. **Segredo no diff = stop.** Se um teste logar token, rewrite do commit antes do push.
 13. **Owner do stack é quem rebaseia.** Se duas pessoas tocam a mesma stack, uma só faz o rebase.
-14. **Worktree não compartilha `./.jdt`.** Workspace é por clone/worktree.
+14. **Worktree em `.worktrees/<tipo>/<slug>/`.** Não compartilha `./.jdt` com o clone principal. Workspace é por checkout.
 15. **PR template curto:** issue, o que o step faz, como testar (`go test`, comando manual), risco (repack/assinatura).
 16. **Não wrappear apktool.** É binário externo. Se o decode falhar, erro com stderr resumido, não parser do mundo apktool.
 17. **Compat de flag.** Flag nova é ok. Renomear/remover flag = issue + menção no AGENTS.md.

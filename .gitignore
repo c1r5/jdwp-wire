@@ -1,6 +1,9 @@
 # local workspace per clone/worktree
 .jdt/
 
+# isolated git worktrees: .worktrees/<tipo>/<slug>/
+.worktrees/
+
 # built binary
 /jdt
 /bin/
