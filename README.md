@@ -4,11 +4,13 @@ CLI (`jdt`) that turns an Android APK/package into a JDWP session usable from An
 
 This is not MobSF. It is not Frida-first. The main path is **smali/Java + JVM debugger**.
 
-Status: **scaffold**. The binary builds and prints help. Pipeline commands are not wired yet.
+Status: **MVP in progress**. `jdt devices` lists adb devices (table or `--json`). Other pipeline commands are not wired yet.
 
 ```
 go build -o jdt ./cmd/jdt
 ./jdt --help
+./jdt devices
+./jdt devices --json
 ```
 
 Product contract: [`AGENTS.md`](AGENTS.md). Repo workflow: [`.grok/rules/development-rules.md`](.grok/rules/development-rules.md).
