@@ -59,7 +59,7 @@ func TestRunUnknownCommand(t *testing.T) {
 
 func TestRunWriteError(t *testing.T) {
 	t.Parallel()
-	code := RunWith(failWriter{}, io.Discard, []string{"--help"})
+	code := RunWith(failWriter{}, io.Discard, []string{"--version"})
 	if code == ExitOK {
 		t.Fatalf("exit %d, want non-zero when stdout write fails", code)
 	}
