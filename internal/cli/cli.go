@@ -103,6 +103,7 @@ func newRoot(cfg runConfig) *cobra.Command {
 	cmd.PersistentFlags().Bool("json", false, "output JSON")
 	cmd.AddCommand(newDevicesCmd(cfg))
 	cmd.AddCommand(newPullCmd(cfg))
+	cmd.AddCommand(newInstallCmd(cfg))
 	return cmd
 }
 
