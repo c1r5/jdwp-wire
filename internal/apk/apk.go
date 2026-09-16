@@ -38,9 +38,10 @@ type Client interface {
 }
 
 type Tools struct {
-	r execx.Runner
+	r    execx.Runner
+	look func(string) (string, error)
 }
 
 func New(r execx.Runner) *Tools {
-	return &Tools{r: r}
+	return &Tools{r: r, look: execx.Look}
 }
