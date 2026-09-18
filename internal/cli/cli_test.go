@@ -45,11 +45,11 @@ func TestRunVersion(t *testing.T) {
 func TestRunUnknownCommand(t *testing.T) {
 	t.Parallel()
 	var stdout, stderr bytes.Buffer
-	code := RunWith(&stdout, &stderr, []string{"attach"})
+	code := RunWith(&stdout, &stderr, []string{"nope"})
 	if code != ExitUsage {
 		t.Fatalf("exit %d, want %d", code, ExitUsage)
 	}
-	if !strings.Contains(stderr.String(), `unknown command "attach"`) {
+	if !strings.Contains(stderr.String(), `unknown command "nope"`) {
 		t.Fatalf("stderr = %q", stderr.String())
 	}
 	if stdout.Len() != 0 {
