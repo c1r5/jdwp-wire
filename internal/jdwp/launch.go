@@ -3,7 +3,6 @@ package jdwp
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	"github.com/c1r5/jdwp-wire/internal/execx"
 )
@@ -34,12 +33,4 @@ func (a *ADB) launch(ctx context.Context, serial, pkg string) (string, error) {
 		return "", wrapRun("launch", "adb", res.Stderr, err)
 	}
 	return "", nil
-}
-
-func (a *ADB) Attach(context.Context, string, string, int) (Session, error) {
-	return Session{}, fmt.Errorf("jdwp: attach: %w", ErrUsage)
-}
-
-func (a *ADB) Reset(context.Context, string, string, int) error {
-	return fmt.Errorf("jdwp: reset: %w", ErrUsage)
 }
