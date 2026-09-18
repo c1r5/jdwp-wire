@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/c1r5/jdwp-wire/internal/apk"
 	"github.com/c1r5/jdwp-wire/internal/device"
 	"github.com/c1r5/jdwp-wire/internal/execx"
 	"github.com/spf13/cobra"
@@ -24,13 +25,17 @@ const (
 )
 
 const defaultTimeout = 10 * time.Second
+const defaultAPKTimeout = 5 * time.Minute
 
 type runConfig struct {
-	stdout  io.Writer
-	stderr  io.Writer
-	device  device.Client
-	timeout time.Duration
-	args    []string
+	stdout     io.Writer
+	stderr     io.Writer
+	device     device.Client
+	apk        apk.Client
+	timeout    time.Duration
+	apkTimeout time.Duration
+	cwd        string
+	args       []string
 }
 
 // Run executes the CLI with process stdio.
@@ -53,8 +58,19 @@ func run(cfg runConfig) int {
 	if cfg.timeout == 0 {
 		cfg.timeout = defaultTimeout
 	}
+	if cfg.apkTimeout == 0 {
+		cfg.apkTimeout = defaultAPKTimeout
+	}
 	if cfg.device == nil {
 		cfg.device = device.NewADB(execx.Exec{})
+	}
+	if cfg.apk == nil {
+		cfg.apk = apk.New(execx.Exec{})
+	}
+	if cfg.cwd == "" {
+		if wd, err := os.Getwd(); err == nil {
+			cfg.cwd = wd
+		}
 	}
 	if cfg.args == nil {
 		cfg.args = []string{}
@@ -86,22 +102,28 @@ func newRoot(cfg runConfig) *cobra.Command {
 	cmd.CompletionOptions.DisableDefaultCmd = true
 	cmd.PersistentFlags().Bool("json", false, "output JSON")
 	cmd.AddCommand(newDevicesCmd(cfg))
+	cmd.AddCommand(newPullCmd(cfg))
+	cmd.AddCommand(newInstallCmd(cfg))
 	return cmd
 }
 
 func exitCode(err error) int {
 	switch {
-	case errors.Is(err, device.ErrToolMissing):
+	case errors.Is(err, device.ErrToolMissing), errors.Is(err, apk.ErrToolMissing):
 		return ExitToolMissing
-	case errors.Is(err, device.ErrNoDevice):
+	case errors.Is(err, device.ErrNoDevice),
+		errors.Is(err, device.ErrAmbiguousDevice),
+		errors.Is(err, device.ErrDeviceUnusable),
+		errors.Is(err, device.ErrDeviceNotFound):
 		return ExitNoDevice
-	case errors.Is(err, device.ErrUsage):
+	case errors.Is(err, device.ErrUsage), errors.Is(err, apk.ErrUsage):
 		return ExitUsage
 	}
 	msg := err.Error()
 	if strings.Contains(msg, "unknown command") ||
 		strings.Contains(msg, "unknown flag") ||
-		strings.Contains(msg, "flag needs an argument") {
+		strings.Contains(msg, "flag needs an argument") ||
+		strings.Contains(msg, "accepts") && strings.Contains(msg, "arg(s)") {
 		return ExitUsage
 	}
 	return 1
