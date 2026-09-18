@@ -11,6 +11,7 @@ import (
 	"github.com/c1r5/jdwp-wire/internal/apk"
 	"github.com/c1r5/jdwp-wire/internal/device"
 	"github.com/c1r5/jdwp-wire/internal/execx"
+	"github.com/c1r5/jdwp-wire/internal/jdwp"
 	"github.com/c1r5/jdwp-wire/internal/patch"
 	"github.com/spf13/cobra"
 )
@@ -27,17 +28,20 @@ const (
 
 const defaultTimeout = 10 * time.Second
 const defaultAPKTimeout = 5 * time.Minute
+const defaultJDWPTimeout = time.Minute
 
 type runConfig struct {
-	stdout     io.Writer
-	stderr     io.Writer
-	device     device.Client
-	apk        apk.Client
-	patch      patch.Applier
-	timeout    time.Duration
-	apkTimeout time.Duration
-	cwd        string
-	args       []string
+	stdout      io.Writer
+	stderr      io.Writer
+	device      device.Client
+	apk         apk.Client
+	patch       patch.Applier
+	jdwp        jdwp.Client
+	timeout     time.Duration
+	apkTimeout  time.Duration
+	jdwpTimeout time.Duration
+	cwd         string
+	args        []string
 }
 
 // Run executes the CLI with process stdio.
@@ -63,6 +67,9 @@ func run(cfg runConfig) int {
 	if cfg.apkTimeout == 0 {
 		cfg.apkTimeout = defaultAPKTimeout
 	}
+	if cfg.jdwpTimeout == 0 {
+		cfg.jdwpTimeout = defaultJDWPTimeout
+	}
 	if cfg.device == nil {
 		cfg.device = device.NewADB(execx.Exec{})
 	}
@@ -71,6 +78,9 @@ func run(cfg runConfig) int {
 	}
 	if cfg.patch == nil {
 		cfg.patch = patch.FS{}
+	}
+	if cfg.jdwp == nil {
+		cfg.jdwp = jdwp.New(execx.Exec{}, cfg.device)
 	}
 	if cfg.cwd == "" {
 		if wd, err := os.Getwd(); err == nil {
@@ -110,19 +120,21 @@ func newRoot(cfg runConfig) *cobra.Command {
 	cmd.AddCommand(newPullCmd(cfg))
 	cmd.AddCommand(newInstallCmd(cfg))
 	cmd.AddCommand(newPatchCmd(cfg))
+	cmd.AddCommand(newAttachCmd(cfg))
+	cmd.AddCommand(newResetCmd(cfg))
 	return cmd
 }
 
 func exitCode(err error) int {
 	switch {
-	case errors.Is(err, device.ErrToolMissing), errors.Is(err, apk.ErrToolMissing):
+	case errors.Is(err, device.ErrToolMissing), errors.Is(err, apk.ErrToolMissing), errors.Is(err, jdwp.ErrToolMissing):
 		return ExitToolMissing
 	case errors.Is(err, device.ErrNoDevice),
 		errors.Is(err, device.ErrAmbiguousDevice),
 		errors.Is(err, device.ErrDeviceUnusable),
 		errors.Is(err, device.ErrDeviceNotFound):
 		return ExitNoDevice
-	case errors.Is(err, device.ErrUsage), errors.Is(err, apk.ErrUsage), errors.Is(err, patch.ErrUsage):
+	case errors.Is(err, device.ErrUsage), errors.Is(err, apk.ErrUsage), errors.Is(err, patch.ErrUsage), errors.Is(err, jdwp.ErrUsage):
 		return ExitUsage
 	}
 	msg := err.Error()
