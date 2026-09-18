@@ -1,6 +1,7 @@
 package patch
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"os"
@@ -57,8 +58,12 @@ func (FS) Apply(dir string) (Result, error) {
 		return Result{}, fmt.Errorf("patch: apply: %w", err)
 	}
 	tag, deb := setDebuggable(body[start:end])
-	if deb == ActionApplied {
-		out := append(append([]byte{}, body[:start]...), append(tag, body[end:]...)...)
+	tag, nsc, err := applyNSC(dir, tag)
+	if err != nil {
+		return Result{}, fmt.Errorf("patch: apply: %w", err)
+	}
+	out := append(append([]byte{}, body[:start]...), append(tag, body[end:]...)...)
+	if !bytes.Equal(body, out) {
 		if err := os.WriteFile(manPath, out, 0o644); err != nil {
 			return Result{}, fmt.Errorf("patch: apply: %w", err)
 		}
@@ -67,6 +72,6 @@ func (FS) Apply(dir string) (Result, error) {
 		Package:    pkg,
 		Dir:        dir,
 		Debuggable: deb,
-		NSC:        ActionSkipped,
+		NSC:        nsc,
 	}, nil
 }

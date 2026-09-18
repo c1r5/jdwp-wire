@@ -89,3 +89,92 @@ func TestFakeNil(t *testing.T) {
 		t.Fatalf("%v", err)
 	}
 }
+
+func TestApplyWritesDefaultNSC(t *testing.T) {
+	t.Parallel()
+	dir := setupDecode(t, "manifest_plain.xml")
+	res, err := FS{}.Apply(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.NSC != ActionApplied {
+		t.Fatalf("%+v", res)
+	}
+	body, err := os.ReadFile(filepath.Join(dir, "res", "xml", "network_security_config.xml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(body, []byte(`src="user"`)) {
+		t.Fatalf("%s", body)
+	}
+	man, err := os.ReadFile(filepath.Join(dir, "AndroidManifest.xml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(man, []byte(`android:networkSecurityConfig="@xml/network_security_config"`)) {
+		t.Fatalf("%s", man)
+	}
+}
+
+func TestApplyMergesExistingNSC(t *testing.T) {
+	t.Parallel()
+	dir := setupDecode(t, "manifest_plain.xml")
+	man := []byte(`<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.alvo">
+    <application android:label="Alvo" android:networkSecurityConfig="@xml/nsc">
+    </application>
+</manifest>`)
+	if err := os.WriteFile(filepath.Join(dir, "AndroidManifest.xml"), man, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "res", "xml"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	src, err := os.ReadFile("testdata/nsc_system.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "res", "xml", "nsc.xml"), src, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	res, err := FS{}.Apply(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.NSC != ActionApplied {
+		t.Fatalf("%+v", res)
+	}
+	got, err := os.ReadFile(filepath.Join(dir, "res", "xml", "nsc.xml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(got, []byte(`src="user"`)) {
+		t.Fatalf("%s", got)
+	}
+}
+
+func TestApplySkipsUserNSC(t *testing.T) {
+	t.Parallel()
+	dir := setupDecode(t, "manifest_debuggable.xml")
+	if err := os.MkdirAll(filepath.Join(dir, "res", "xml"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "res", "xml", "network_security_config.xml"),
+		[]byte(`<network-security-config><trust-anchors><certificates src="user" /></trust-anchors></network-security-config>`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "AndroidManifest.xml"), []byte(`<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.alvo">
+    <application android:debuggable="true" android:networkSecurityConfig="@xml/network_security_config">
+    </application>
+</manifest>`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	res, err := FS{}.Apply(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.NSC != ActionSkipped || res.Debuggable != ActionSkipped {
+		t.Fatalf("%+v", res)
+	}
+}
