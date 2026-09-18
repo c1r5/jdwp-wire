@@ -11,6 +11,7 @@ import (
 	"github.com/c1r5/jdwp-wire/internal/apk"
 	"github.com/c1r5/jdwp-wire/internal/device"
 	"github.com/c1r5/jdwp-wire/internal/execx"
+	"github.com/c1r5/jdwp-wire/internal/patch"
 	"github.com/spf13/cobra"
 )
 
@@ -32,6 +33,7 @@ type runConfig struct {
 	stderr     io.Writer
 	device     device.Client
 	apk        apk.Client
+	patch      patch.Applier
 	timeout    time.Duration
 	apkTimeout time.Duration
 	cwd        string
@@ -66,6 +68,9 @@ func run(cfg runConfig) int {
 	}
 	if cfg.apk == nil {
 		cfg.apk = apk.New(execx.Exec{})
+	}
+	if cfg.patch == nil {
+		cfg.patch = patch.FS{}
 	}
 	if cfg.cwd == "" {
 		if wd, err := os.Getwd(); err == nil {
@@ -104,6 +109,7 @@ func newRoot(cfg runConfig) *cobra.Command {
 	cmd.AddCommand(newDevicesCmd(cfg))
 	cmd.AddCommand(newPullCmd(cfg))
 	cmd.AddCommand(newInstallCmd(cfg))
+	cmd.AddCommand(newPatchCmd(cfg))
 	return cmd
 }
 
@@ -116,7 +122,7 @@ func exitCode(err error) int {
 		errors.Is(err, device.ErrDeviceUnusable),
 		errors.Is(err, device.ErrDeviceNotFound):
 		return ExitNoDevice
-	case errors.Is(err, device.ErrUsage), errors.Is(err, apk.ErrUsage):
+	case errors.Is(err, device.ErrUsage), errors.Is(err, apk.ErrUsage), errors.Is(err, patch.ErrUsage):
 		return ExitUsage
 	}
 	msg := err.Error()
