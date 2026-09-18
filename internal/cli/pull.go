@@ -36,12 +36,36 @@ func newPullCmd(cfg runConfig) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			doDecode, err := flagBool(cmd, "decode")
+			if err != nil {
+				return err
+			}
+			var decDir string
+			if doDecode {
+				layout, err := workspace.ForPackage(cfg.cwd, art.Package)
+				if err != nil {
+					return err
+				}
+				dec, err := pipelineFrom(cfg).decode.Decode(ctx, art.APK, layout)
+				if err != nil {
+					return err
+				}
+				decDir = dec.Dir
+			}
 			if asJSON {
 				return writePullJSON(cmd.OutOrStdout(), art)
 			}
-			return writePullHuman(cmd.OutOrStdout(), art)
+			if err := writePullHuman(cmd.OutOrStdout(), art); err != nil {
+				return err
+			}
+			if doDecode {
+				_, err := fmt.Fprintf(cmd.OutOrStdout(), "[ok] decode: %s\n", decDir)
+				return err
+			}
+			return nil
 		},
 	}
+	addStepFlags(cmd, false, true, false)
 	cmd.Flags().StringP("serial", "s", "", "adb serial (required if multiple devices)")
 	cmd.Flags().String("package", "", "package name (required when pulling a local APK file)")
 	return cmd

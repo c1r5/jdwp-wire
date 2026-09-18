@@ -155,3 +155,39 @@ func TestPullNoArgs(t *testing.T) {
 		t.Fatalf("exit %d want %d stderr=%q", code, ExitUsage, stderr.String())
 	}
 }
+
+func TestPullDecode(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	var decodedFrom string
+	var stdout, stderr bytes.Buffer
+	code := run(runConfig{
+		stdout: &stdout,
+		stderr: &stderr,
+		cwd:    dir,
+		device: testDevice(),
+		apk: &apk.Fake{
+			PullFn: func(_ context.Context, _, _ string, layout workspace.Layout) (apk.Artifact, error) {
+				return apk.Artifact{Package: "com.alvo", APK: filepath.Join(layout.APK, "base.apk")}, nil
+			},
+			DecodeFn: func(_ context.Context, apkPath string, layout workspace.Layout) (apk.Decoded, error) {
+				decodedFrom = apkPath
+				return apk.Decoded{Package: "com.alvo", Dir: layout.Decode}, nil
+			},
+		},
+		args: []string{"pull", "--decode", "com.alvo"},
+	})
+	if code != ExitOK {
+		t.Fatalf("exit %d stderr=%q", code, stderr.String())
+	}
+	if decodedFrom == "" {
+		t.Fatal("decode not called")
+	}
+	out := stdout.String()
+	if !strings.Contains(out, "[ok] pull: com.alvo") {
+		t.Fatalf("stdout=%q", out)
+	}
+	if !strings.Contains(out, "[ok] decode:") {
+		t.Fatalf("stdout=%q", out)
+	}
+}

@@ -15,7 +15,7 @@ import (
 
 func newPatchCmd(cfg runConfig) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "patch [decoded_dir]",
+		Use:   "patch [decoded_dir|pkg]",
 		Short: "Make a decoded apktool tree debuggable and trust user CAs (destructive on the decode dir; does not install)",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -27,11 +27,23 @@ func newPatchCmd(cfg runConfig) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			serial, err := cmd.Flags().GetString("serial")
+			if err != nil {
+				return err
+			}
+			doPull, err := flagBool(cmd, "pull")
+			if err != nil {
+				return err
+			}
+			doDecode, err := flagBool(cmd, "decode")
+			if err != nil {
+				return err
+			}
 			asJSON, err := cmd.Flags().GetBool("json")
 			if err != nil {
 				return err
 			}
-			res, err := runPatch(cmd.Context(), cfg, args, apkFlag, pkgFlag)
+			res, err := runPatch(cmd.Context(), cfg, args, apkFlag, pkgFlag, serial, doPull, doDecode, asJSON, cmd.OutOrStdout())
 			if err != nil {
 				return err
 			}
@@ -44,12 +56,37 @@ func newPatchCmd(cfg runConfig) *cobra.Command {
 			return writePatchHuman(cmd.OutOrStdout(), res)
 		},
 	}
+	addStepFlags(cmd, true, true, false)
+	cmd.Flags().StringP("serial", "s", "", "adb serial (required if multiple devices)")
 	cmd.Flags().String("apk", "", "local APK to decode then patch (requires --package)")
 	cmd.Flags().String("package", "", "package name (required with --apk)")
 	return cmd
 }
 
-func runPatch(ctx context.Context, cfg runConfig, args []string, apkFlag, pkgFlag string) (patch.Result, error) {
+func runPatch(ctx context.Context, cfg runConfig, args []string, apkFlag, pkgFlag, serial string, doPull, doDecode, asJSON bool, stdout io.Writer) (patch.Result, error) {
+	if doPull && !doDecode {
+		return patch.Result{}, fmt.Errorf("%w: --decode required with --pull", patch.ErrUsage)
+	}
+	if (doPull || doDecode) && apkFlag != "" {
+		return patch.Result{}, fmt.Errorf("%w: --apk and --pull/--decode are mutually exclusive", patch.ErrUsage)
+	}
+	if doPull || doDecode {
+		if len(args) != 1 {
+			return patch.Result{}, fmt.Errorf("%w: package required with --pull/--decode", patch.ErrUsage)
+		}
+		ctx, cancel := context.WithTimeout(ctx, cfg.apkTimeout)
+		defer cancel()
+		st, err := pipelineFrom(cfg).run(ctx, args[0], serial, doPull, doDecode)
+		if err != nil {
+			return patch.Result{}, err
+		}
+		if !asJSON {
+			if err := writeStepHuman(stdout, doPull, doDecode, st); err != nil {
+				return patch.Result{}, err
+			}
+		}
+		return cfg.patch.Apply(st.Decode.Dir)
+	}
 	if apkFlag != "" && len(args) > 0 {
 		return patch.Result{}, fmt.Errorf("%w: decoded_dir and --apk are mutually exclusive", patch.ErrUsage)
 	}

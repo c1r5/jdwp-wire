@@ -13,7 +13,9 @@ go build -o jdt ./cmd/jdt
 ./jdt devices --json
 ./jdt pull com.alvo
 ./jdt pull ./app.apk --package com.alvo
+./jdt pull --decode com.alvo
 ./jdt patch .jdt/com.alvo/decode
+./jdt patch --pull --decode com.alvo
 ./jdt patch --apk ./app.apk --package com.alvo
 ./jdt install .jdt/com.alvo/apk/base.apk
 ```
