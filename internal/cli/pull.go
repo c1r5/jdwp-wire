@@ -32,18 +32,41 @@ func newPullCmd(cfg runConfig) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			doDecode, err := cmd.Flags().GetBool("decode")
+			if err != nil {
+				return err
+			}
 			art, err := runPull(ctx, cfg, args[0], serial, pkgFlag)
 			if err != nil {
 				return err
 			}
-			if asJSON {
-				return writePullJSON(cmd.OutOrStdout(), art)
+			var dec apk.Decoded
+			if doDecode {
+				layout, err := workspace.ForPackage(cfg.cwd, art.Package)
+				if err != nil {
+					return err
+				}
+				dec, err = cfg.apk.Decode(ctx, art.APK, layout)
+				if err != nil {
+					return err
+				}
 			}
-			return writePullHuman(cmd.OutOrStdout(), art)
+			if asJSON {
+				return writePullJSON(cmd.OutOrStdout(), art, dec.Dir)
+			}
+			if err := writePullHuman(cmd.OutOrStdout(), art); err != nil {
+				return err
+			}
+			if doDecode {
+				_, err := fmt.Fprintf(cmd.OutOrStdout(), "[ok] decode: %s\n", dec.Dir)
+				return err
+			}
+			return nil
 		},
 	}
 	cmd.Flags().StringP("serial", "s", "", "adb serial (required if multiple devices)")
 	cmd.Flags().String("package", "", "package name (required when pulling a local APK file)")
+	cmd.Flags().Bool("decode", false, "apktool-decode the APK into .jdt/<pkg>/decode")
 	return cmd
 }
 
@@ -90,13 +113,15 @@ type pullJSON struct {
 	Package       string   `json:"package"`
 	APK           string   `json:"apk"`
 	SkippedSplits []string `json:"skipped_splits"`
+	Decode        string   `json:"decode,omitempty"`
 }
 
-func writePullJSON(w io.Writer, art apk.Artifact) error {
+func writePullJSON(w io.Writer, art apk.Artifact, decodeDir string) error {
 	out := pullJSON{
 		Package:       art.Package,
 		APK:           art.APK,
 		SkippedSplits: art.SkippedSplits,
+		Decode:        decodeDir,
 	}
 	if out.SkippedSplits == nil {
 		out.SkippedSplits = []string{}
