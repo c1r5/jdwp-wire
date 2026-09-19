@@ -63,9 +63,9 @@ Binário: `jdt`
 
 ```
 jdt devices
-jdt pull     <pkg|apk>
+jdt pull     <pkg|apk> [--decode]
 jdt patch    <decoded_dir|--apk>
-jdt install  <apk>
+jdt install  <apk|decoded_dir|pkg>
 jdt attach   <pkg> [--port 8700] [--studio] [--no-patch]
 jdt targets  <pkg|decoded> [--http] [--crypto]
 jdt watch    --port 8700 [--dump-okhttp]   # v1
