@@ -90,13 +90,25 @@ Faz o máximo que o MVP cobrir e imprime o que falta (ex.: “app já debuggable
 | `apk`     | pull, merge split/XAPK, apktool, sign      | pull + decode + sign + install | split robusto, AAB |
 | `patch`   | `debuggable=true`, NSC user CA             | sim | extractNativeLibs, keep signature se possível |
 | `jdwp`    | set-debug-app, wait, forward, healthcheck  | sim | retry / process spawn vs attach |
-| `project` | pasta Studio + Remote JVM Debug xml        | sim (mínimo) | JADX sources opcional |
+| `project` | esqueleto IntelliJ em `.jdt/<pkg>/idea` (content root = decode) + Remote JVM Debug `localhost:PORT` | sim (módulo; `--studio` no attach depois de jdwp na main) | JADX sources opcional |
 | `targets` | sinks HTTP/crypto no smali/java            | lista OkHttp/Retrofit/HttpURLConnection | Cipher / pinning classes |
 | `capture` | dump JDWP do frame → JSON/HAR              | não | `watch --dump-okhttp` |
 | `frida`   | companion unpin / hide-debugger            | não | `--unpin` opcional |
 | `android` | shell-out p/ Android CLI se estiver no PATH | detect + `run --debug` | emulator, layout |
 
 Frida não é o caminho principal. Entra só quando JDWP sozinho não segura (pinning, anti-debug).
+
+### `project` vs o resto
+
+`workspace` reserva paths (`idea/`, `decode/`, …) e não escreve conteúdo.
+`apk` faz pull/decode/sign/install. `jdwp` faz set-debug-app, launch, forward, probe.
+`project` **só** materializa o diretório que o Android Studio abre.
+
+MVP: `.jdt/<pkg>/idea` com `decode.iml` + `.idea/{misc,modules}.xml` + `.idea/runConfigurations/Remote_Debug.xml`. O smali **não** se copia — o iml aponta `../decode`. Sem Gradle, sem plugin Android, sem escolher o JDK da máquina, sem instalar smalidea.
+
+Não há `jdt project`. O atalho `--studio` no attach é wiring do `cli` (depois de `jdwp` na `main`); até lá o flag imprime skip. `project` não lança o IDE.
+
+Patch destrutivo e Integrity continuam a ser problema de `patch`/`apk`, não deste módulo.
 
 ---
 
@@ -138,7 +150,7 @@ Inclui:
 4. Patch `android:debuggable="true"` no manifest + rebuild + sign debug + install (`-r` / `-d` se necessário).
 5. Launch debugável: `android run --debug --apks=...` se a CLI oficial estiver instalada; senão `am set-debug-app -w` + start + `forward tcp:PORT jdwp:PID`. Probe da porta nos dois caminhos.
 6. `jdt reset` (clear-debug-app + remove forward).
-7. `--studio`: gera dir de projeto com smali decode + `.idea/runConfigurations/Remote_Debug.xml` em `localhost:PORT`.
+7. Módulo `project`: escreve o esqueleto IntelliJ em `.jdt/<pkg>/idea` (Remote Debug `localhost:PORT`, content root = decode já existente). O flag `--studio` no attach ainda não chama isto (skip até o wiring no `cli`).
 8. `jdt targets --http`: grep/parse raso de OkHttp / Retrofit / `HttpURLConnection` no decode; imprime `classe#metodo`.
 9. Log em texto: cada passo, skip, e o one-liner de attach.
 
@@ -206,7 +218,7 @@ Ainda fora do v1 (backlog consciente):
 
 1. Plug device, USB debug on.
 2. `jdt attach com.alvo --studio`
-3. Abre a pasta gerada no Android Studio.
+3. Abre `.jdt/<pkg>/idea` no Android Studio (não a pasta `decode/`).
 4. Attach Remote Debugger na porta impressa.
 5. Break no método que `targets` apontou (ou no que já conhece).
 6. Usa o app. No hit, inspeciona o objeto Request.
