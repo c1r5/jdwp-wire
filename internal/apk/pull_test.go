@@ -22,8 +22,9 @@ func TestParsePMPathBaseAndSplits(t *testing.T) {
 	if !strings.HasSuffix(base, "/base.apk") {
 		t.Fatalf("base=%s", base)
 	}
-	if len(splits) != 1 || !strings.Contains(splits[0], "split_config.xxhdpi.apk") {
-		t.Fatalf("splits=%v", splits)
+	wantSplit := "/data/app/~~x==/com.alvo-x/split_config.xxhdpi.apk"
+	if len(splits) != 1 || splits[0] != wantSplit {
+		t.Fatalf("splits=%v, want %q", splits, wantSplit)
 	}
 }
 
@@ -50,6 +51,7 @@ func TestToolsPull(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	var pulled []string
 	r := &execx.Fake{RunFn: func(_ context.Context, name string, args ...string) (execx.Result, error) {
 		if name != "adb" {
 			t.Fatalf("name %s", name)
@@ -58,6 +60,7 @@ func TestToolsPull(t *testing.T) {
 			return execx.Result{Stdout: "package:/data/app/x/base.apk\npackage:/data/app/x/split_config.xxhdpi.apk\n"}, nil
 		}
 		if args[0] == "-s" && args[2] == "pull" {
+			pulled = append(pulled, args[3])
 			dest := args[4]
 			if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 				return execx.Result{}, err
@@ -76,12 +79,37 @@ func TestToolsPull(t *testing.T) {
 	if filepath.Base(art.APK) != "base.apk" {
 		t.Fatalf("apk %s", art.APK)
 	}
-	if len(art.SkippedSplits) != 1 {
-		t.Fatalf("skipped %v", art.SkippedSplits)
+	if len(art.Splits) != 1 || filepath.Base(art.Splits[0]) != "split_config.xxhdpi.apk" {
+		t.Fatalf("splits %v", art.Splits)
 	}
-	b, err := os.ReadFile(art.APK)
-	if err != nil || string(b) != "apk" {
-		t.Fatalf("file %q err %v", b, err)
+	wantRemote := []string{"/data/app/x/base.apk", "/data/app/x/split_config.xxhdpi.apk"}
+	if len(pulled) != 2 || pulled[0] != wantRemote[0] || pulled[1] != wantRemote[1] {
+		t.Fatalf("pulled %v", pulled)
+	}
+	for _, p := range append([]string{art.APK}, art.Splits...) {
+		b, err := os.ReadFile(p)
+		if err != nil || string(b) != "apk" {
+			t.Fatalf("file %s %q err %v", p, b, err)
+		}
+	}
+}
+
+func TestListSplits(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "base.apk"), []byte("b"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	split := filepath.Join(dir, "split_config.xxhdpi.apk")
+	if err := os.WriteFile(split, []byte("s"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := ListSplits(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0] != split {
+		t.Fatalf("got %v", got)
 	}
 }
 

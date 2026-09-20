@@ -13,7 +13,7 @@ type Fake struct {
 	DecodeFn  func(ctx context.Context, apkPath string, layout workspace.Layout) (Decoded, error)
 	BuildFn   func(ctx context.Context, decodedDir, outAPK string) (Artifact, error)
 	SignFn    func(ctx context.Context, apkPath, keystore string) (Artifact, error)
-	InstallFn func(ctx context.Context, serial, apkPath string) error
+	InstallFn func(ctx context.Context, serial string, apks ...string) error
 }
 
 func fakeErr() error {
@@ -55,9 +55,9 @@ func (f *Fake) Sign(ctx context.Context, apkPath, keystore string) (Artifact, er
 	return f.SignFn(ctx, apkPath, keystore)
 }
 
-func (f *Fake) Install(ctx context.Context, serial, apkPath string) error {
+func (f *Fake) Install(ctx context.Context, serial string, apks ...string) error {
 	if f == nil || f.InstallFn == nil {
 		return fakeErr()
 	}
-	return f.InstallFn(ctx, serial, apkPath)
+	return f.InstallFn(ctx, serial, apks...)
 }

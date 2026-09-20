@@ -35,9 +35,9 @@ func TestPullHuman(t *testing.T) {
 				t.Fatalf("pull %s %s", serial, pkg)
 			}
 			return apk.Artifact{
-				Package:       "com.alvo",
-				APK:           ".jdt/com.alvo/apk/base.apk",
-				SkippedSplits: []string{"split_config.xxhdpi.apk"},
+				Package: "com.alvo",
+				APK:     ".jdt/com.alvo/apk/base.apk",
+				Splits:  []string{".jdt/com.alvo/apk/split_config.xxhdpi.apk"},
 			}, nil
 		}},
 		args: []string{"pull", "com.alvo"},
@@ -52,8 +52,8 @@ func TestPullHuman(t *testing.T) {
 	if !strings.Contains(out, "base.apk") {
 		t.Fatalf("path missing: %q", out)
 	}
-	if !strings.Contains(out, "[skip] split: split_config.xxhdpi.apk") {
-		t.Fatalf("skip missing: %q", out)
+	if !strings.Contains(out, "[ok] pull: .jdt/com.alvo/apk/split_config.xxhdpi.apk") {
+		t.Fatalf("split missing: %q", out)
 	}
 }
 
@@ -73,9 +73,9 @@ func TestPullJSON(t *testing.T) {
 		t.Fatalf("exit %d stderr=%q", code, stderr.String())
 	}
 	var got struct {
-		Package       string   `json:"package"`
-		APK           string   `json:"apk"`
-		SkippedSplits []string `json:"skipped_splits"`
+		Package string   `json:"package"`
+		APK     string   `json:"apk"`
+		Splits  []string `json:"splits"`
 	}
 	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
 		t.Fatal(err)
@@ -83,8 +83,8 @@ func TestPullJSON(t *testing.T) {
 	if got.Package != "com.alvo" || got.APK != ".jdt/com.alvo/apk/base.apk" {
 		t.Fatalf("%+v", got)
 	}
-	if got.SkippedSplits == nil {
-		t.Fatal("skipped_splits null")
+	if got.Splits == nil {
+		t.Fatal("splits null")
 	}
 }
 
@@ -217,10 +217,10 @@ func TestPullDecodeJSON(t *testing.T) {
 		t.Fatalf("exit %d stderr=%q", code, stderr.String())
 	}
 	var got struct {
-		Package       string   `json:"package"`
-		APK           string   `json:"apk"`
-		SkippedSplits []string `json:"skipped_splits"`
-		Decode        string   `json:"decode"`
+		Package string   `json:"package"`
+		APK     string   `json:"apk"`
+		Splits  []string `json:"splits"`
+		Decode  string   `json:"decode"`
 	}
 	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
 		t.Fatal(err)

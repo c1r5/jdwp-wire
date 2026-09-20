@@ -101,8 +101,8 @@ func writePullHuman(w io.Writer, art apk.Artifact) error {
 	if _, err := fmt.Fprintf(w, "[ok] pull: %s → %s\n", art.Package, art.APK); err != nil {
 		return err
 	}
-	for _, s := range art.SkippedSplits {
-		if _, err := fmt.Fprintf(w, "[skip] split: %s (v1)\n", s); err != nil {
+	for _, s := range art.Splits {
+		if _, err := fmt.Fprintf(w, "[ok] pull: %s\n", s); err != nil {
 			return err
 		}
 	}
@@ -110,21 +110,21 @@ func writePullHuman(w io.Writer, art apk.Artifact) error {
 }
 
 type pullJSON struct {
-	Package       string   `json:"package"`
-	APK           string   `json:"apk"`
-	SkippedSplits []string `json:"skipped_splits"`
-	Decode        string   `json:"decode,omitempty"`
+	Package string   `json:"package"`
+	APK     string   `json:"apk"`
+	Splits  []string `json:"splits"`
+	Decode  string   `json:"decode,omitempty"`
 }
 
 func writePullJSON(w io.Writer, art apk.Artifact, decodeDir string) error {
 	out := pullJSON{
-		Package:       art.Package,
-		APK:           art.APK,
-		SkippedSplits: art.SkippedSplits,
-		Decode:        decodeDir,
+		Package: art.Package,
+		APK:     art.APK,
+		Splits:  art.Splits,
+		Decode:  decodeDir,
 	}
-	if out.SkippedSplits == nil {
-		out.SkippedSplits = []string{}
+	if out.Splits == nil {
+		out.Splits = []string{}
 	}
 	b, err := json.Marshal(out)
 	if err != nil {

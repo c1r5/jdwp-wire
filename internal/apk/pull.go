@@ -34,14 +34,29 @@ func (t *Tools) Pull(ctx context.Context, serial, pkg string, layout workspace.L
 		return Artifact{}, fmt.Errorf("apk: pull: %w", err)
 	}
 	dest := filepath.Join(layout.APK, "base.apk")
-	_, err = t.r.Run(ctx, "adb", "-s", serial, "pull", remote, dest)
+	if err := t.pullTo(ctx, serial, remote, dest); err != nil {
+		return Artifact{}, err
+	}
+	local := make([]string, 0, len(splits))
+	for _, s := range splits {
+		ldest := filepath.Join(layout.APK, filepath.Base(s))
+		if err := t.pullTo(ctx, serial, s, ldest); err != nil {
+			return Artifact{}, err
+		}
+		local = append(local, ldest)
+	}
+	return Artifact{Package: pkg, APK: dest, Splits: local}, nil
+}
+
+func (t *Tools) pullTo(ctx context.Context, serial, remote, dest string) error {
+	_, err := t.r.Run(ctx, "adb", "-s", serial, "pull", remote, dest)
 	if errors.Is(err, execx.ErrNotFound) {
-		return Artifact{}, fmt.Errorf("apk: pull: %w: adb", ErrToolMissing)
+		return fmt.Errorf("apk: pull: %w: adb", ErrToolMissing)
 	}
 	if err != nil {
-		return Artifact{}, fmt.Errorf("apk: pull: %w", err)
+		return fmt.Errorf("apk: pull: %w", err)
 	}
-	return Artifact{Package: pkg, APK: dest, SkippedSplits: splits}, nil
+	return nil
 }
 
 func (t *Tools) CopyAPK(_ context.Context, src, pkg string, layout workspace.Layout) (Artifact, error) {
