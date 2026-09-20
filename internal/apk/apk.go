@@ -16,9 +16,9 @@ var (
 )
 
 type Artifact struct {
-	Package       string
-	APK           string
-	SkippedSplits []string
+	Package string
+	APK     string
+	Splits  []string
 }
 
 type Decoded struct {
@@ -34,7 +34,7 @@ type Client interface {
 	Decode(ctx context.Context, apkPath string, layout workspace.Layout) (Decoded, error)
 	Build(ctx context.Context, decodedDir, outAPK string) (Artifact, error)
 	Sign(ctx context.Context, apkPath, keystore string) (Artifact, error)
-	Install(ctx context.Context, serial, apkPath string) error
+	Install(ctx context.Context, serial string, apks ...string) error
 }
 
 type Tools struct {

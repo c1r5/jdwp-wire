@@ -25,6 +25,23 @@ func TestInstallArgs(t *testing.T) {
 	}
 }
 
+func TestInstallMultipleArgs(t *testing.T) {
+	t.Parallel()
+	var got []string
+	r := &execx.Fake{RunFn: func(_ context.Context, name string, args ...string) (execx.Result, error) {
+		got = append([]string{name}, args...)
+		return execx.Result{}, nil
+	}}
+	err := New(r).Install(context.Background(), "emu", "/tmp/base.apk", "/tmp/split_config.xxhdpi.apk")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"adb", "-s", "emu", "install-multiple", "-r", "-d", "/tmp/base.apk", "/tmp/split_config.xxhdpi.apk"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %v", got)
+	}
+}
+
 func TestInstallUsage(t *testing.T) {
 	t.Parallel()
 	err := New(&execx.Fake{}).Install(context.Background(), "", "/tmp/a.apk")

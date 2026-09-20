@@ -87,7 +87,7 @@ Faz o máximo que o MVP cobrir e imprime o que falta (ex.: “app já debuggable
 | Módulo    | Papel                                      | MVP | v1 |
 |-----------|--------------------------------------------|-----|----|
 | `device`  | serial, root/userdebug, `pidof` estável    | sim | multi-device explícito |
-| `apk`     | pull, merge split/XAPK, apktool, sign      | pull + decode + sign + install | split robusto, AAB |
+| `apk`     | pull, splits, apktool, sign                | pull + decode + sign + install-multiple (sem merge) | AAB |
 | `patch`   | `debuggable=true`, NSC user CA             | sim | extractNativeLibs, keep signature se possível |
 | `jdwp`    | set-debug-app, wait, forward, healthcheck  | sim | retry / process spawn vs attach |
 | `project` | esqueleto IntelliJ em `.jdt/<pkg>/idea` (content root = decode) + Remote JVM Debug `localhost:PORT` | sim (módulo; `--studio` no attach depois de jdwp na main) | JADX sources opcional |
@@ -180,7 +180,7 @@ Inclui:
 
 2. `targets --crypto` (Cipher, SecretKeySpec, Mac) — lista, ainda sem dump genérico.
 
-3. Split APK de verdade (vários `split_config.*` + merge instalável).
+3. AAB. Split APK já é pull de todos os paths + `adb install-multiple` (sem merge).
 
 4. PID certo: processo default vs `:remote` / isolated; flag `--process`.
 

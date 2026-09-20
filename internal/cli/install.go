@@ -14,6 +14,12 @@ import (
 	"github.com/spf13/cobra"
 )
 
+type installPrep struct {
+	Base    string
+	Splits  []string
+	Encoded bool
+}
+
 func newInstallCmd(cfg runConfig) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "install <apk|decoded_dir|pkg>",
@@ -38,24 +44,28 @@ func newInstallCmd(cfg runConfig) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			apkPath, encoded, err := prepareInstall(ctx, cfg, args[0], pkgFlag)
+			prep, err := prepareInstall(ctx, cfg, args[0], pkgFlag)
 			if err != nil {
 				return err
 			}
-			signed, err := cfg.apk.Sign(ctx, apkPath, workspace.DebugKeystore(cfg.cwd))
-			if err != nil {
-				return err
+			apks := append([]string{prep.Base}, prep.Splits...)
+			ks := workspace.DebugKeystore(cfg.cwd)
+			for i, p := range apks {
+				signed, err := cfg.apk.Sign(ctx, p, ks)
+				if err != nil {
+					return err
+				}
+				if signed.APK != "" {
+					apks[i] = signed.APK
+				}
 			}
-			if signed.APK != "" {
-				apkPath = signed.APK
-			}
-			if err := cfg.apk.Install(ctx, dev.Serial, apkPath); err != nil {
+			if err := cfg.apk.Install(ctx, dev.Serial, apks...); err != nil {
 				return err
 			}
 			if asJSON {
-				return writeInstallJSON(cmd.OutOrStdout(), apkPath, dev.Serial)
+				return writeInstallJSON(cmd.OutOrStdout(), apks[0], apks[1:], dev.Serial)
 			}
-			return writeInstallHuman(cmd.OutOrStdout(), apkPath, encoded)
+			return writeInstallHuman(cmd.OutOrStdout(), apks, prep.Encoded)
 		},
 	}
 	cmd.Flags().StringP("serial", "s", "", "adb serial (required if multiple devices)")
@@ -63,32 +73,93 @@ func newInstallCmd(cfg runConfig) *cobra.Command {
 	return cmd
 }
 
-func prepareInstall(ctx context.Context, cfg runConfig, target, pkgFlag string) (string, bool, error) {
+func prepareInstall(ctx context.Context, cfg runConfig, target, pkgFlag string) (installPrep, error) {
 	st, err := os.Stat(target)
 	if err == nil && !st.IsDir() {
-		return target, false, nil
+		return installPrep{Base: target}, nil
 	}
+	pkg := pkgFlag
+	decodeDir := ""
 	if err == nil && st.IsDir() {
 		if !isDecodedTree(target) {
-			return "", false, fmt.Errorf("%w: not an apktool decode directory", apk.ErrUsage)
+			return installPrep{}, fmt.Errorf("%w: not an apktool decode directory", apk.ErrUsage)
 		}
-		pkg := pkgFlag
 		if pkg == "" {
 			pkg, err = packageFromDecodeDir(cfg.cwd, target)
 			if err != nil {
-				return "", false, err
+				return installPrep{}, err
 			}
 		}
-		return buildPatched(ctx, cfg, target, pkg)
+		decodeDir = target
+	} else {
+		pkg = target
+		layout, err := workspace.ForPackage(cfg.cwd, pkg)
+		if err != nil {
+			return installPrep{}, err
+		}
+		if !isDecodedTree(layout.Decode) {
+			return installPrep{}, fmt.Errorf("install: decode: %w", os.ErrNotExist)
+		}
+		decodeDir = layout.Decode
 	}
-	layout, err := workspace.ForPackage(cfg.cwd, target)
+	base, encoded, err := buildPatched(ctx, cfg, decodeDir, pkg)
 	if err != nil {
-		return "", false, err
+		return installPrep{}, err
 	}
-	if !isDecodedTree(layout.Decode) {
-		return "", false, fmt.Errorf("install: decode: %w", os.ErrNotExist)
+	splits, err := stageSplits(cfg.cwd, pkg)
+	if err != nil {
+		return installPrep{}, err
 	}
-	return buildPatched(ctx, cfg, layout.Decode, target)
+	return installPrep{Base: base, Splits: splits, Encoded: encoded}, nil
+}
+
+func stageSplits(cwd, pkg string) ([]string, error) {
+	layout, err := workspace.ForPackage(cwd, pkg)
+	if err != nil {
+		return nil, err
+	}
+	src, err := apk.ListSplits(layout.APK)
+	if err != nil {
+		return nil, err
+	}
+	dests := make([]string, 0, len(src))
+	for _, s := range src {
+		dst := filepath.Join(layout.Patched, filepath.Base(s))
+		if err := copyFile(s, dst); err != nil {
+			return nil, err
+		}
+		dests = append(dests, dst)
+	}
+	return dests, nil
+}
+
+func copyFile(src, dst string) error {
+	if src == dst {
+		return nil
+	}
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		_ = in.Close()
+		return err
+	}
+	out, err := os.Create(dst)
+	if err != nil {
+		_ = in.Close()
+		return err
+	}
+	_, copyErr := io.Copy(out, in)
+	closeOut := out.Close()
+	closeIn := in.Close()
+	if copyErr != nil {
+		return copyErr
+	}
+	if closeOut != nil {
+		return closeOut
+	}
+	return closeIn
 }
 
 func buildPatched(ctx context.Context, cfg runConfig, decodedDir, pkg string) (string, bool, error) {
@@ -149,26 +220,39 @@ func packageFromDecodeDir(cwd, dir string) (string, error) {
 	return parts[0], nil
 }
 
-func writeInstallHuman(w io.Writer, apkPath string, encoded bool) error {
+func writeInstallHuman(w io.Writer, apks []string, encoded bool) error {
+	if len(apks) == 0 {
+		return nil
+	}
 	if encoded {
-		if _, err := fmt.Fprintf(w, "[ok] encode: %s\n", apkPath); err != nil {
+		if _, err := fmt.Fprintf(w, "[ok] encode: %s\n", apks[0]); err != nil {
 			return err
 		}
 	}
-	if _, err := fmt.Fprintf(w, "[ok] sign: %s\n", apkPath); err != nil {
-		return err
+	for _, p := range apks {
+		if _, err := fmt.Fprintf(w, "[ok] sign: %s\n", p); err != nil {
+			return err
+		}
 	}
-	_, err := fmt.Fprintf(w, "[ok] install: %s\n", apkPath)
-	return err
+	for _, p := range apks {
+		if _, err := fmt.Fprintf(w, "[ok] install: %s\n", p); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 type installJSON struct {
-	APK    string `json:"apk"`
-	Serial string `json:"serial"`
+	APK    string   `json:"apk"`
+	Splits []string `json:"splits"`
+	Serial string   `json:"serial"`
 }
 
-func writeInstallJSON(w io.Writer, apkPath, serial string) error {
-	b, err := json.Marshal(installJSON{APK: apkPath, Serial: serial})
+func writeInstallJSON(w io.Writer, apkPath string, splits []string, serial string) error {
+	if splits == nil {
+		splits = []string{}
+	}
+	b, err := json.Marshal(installJSON{APK: apkPath, Splits: splits, Serial: serial})
 	if err != nil {
 		return err
 	}
