@@ -18,14 +18,14 @@ jdwp-wire/
   README.md
   go.mod
   go.sum
-  cmd/
-    jdt/                 # main, só wiring de flags → módulos
+  main.go                # package main; go build -o jdt . / go install .
+  cmd/                   # Cobra: flags, I/O humano/--json, exit codes
   internal/
-    cli/                 # flags, output humano/--json, exit codes
+    devices/ pull/ install/ attach/ reset/ patchapply/  # orch por comando
     execx/               # wrapper de subprocess (adb, apktool, android)
     device/
     apk/
-    patch/
+    patch/               # domínio (manifest/NSC); orch do comando é patchapply
     jdwp/
     project/
     targets/
@@ -38,12 +38,13 @@ jdwp-wire/
 
 Regras de forma:
 
-- `cmd/jdt` não contém regra de negócio.
+- `cmd/` não contém regra de negócio (só Cobra + apresentação).
 - Pacote novo só em `internal/<modulo>`. API pública do módulo = o que `cmd` e outros `internal` importam.
-- Dependência entre módulos é acíclica. Sentido permitido: `execx` ← `device`/`apk`/`androidcli` ← `jdwp`/`patch`/`project`/`targets` ← `cli` ← `cmd`.
+- Dependência entre módulos é acíclica. Sentido permitido: `execx` ← `device`/`apk`/`androidcli` ← `jdwp`/`patch`/`project`/`targets` ← orch por comando ← `cmd` ← `main`.
 - Sem estado global de ADB (lição do repo antigo).
-- Sem `init()`. Sem `package main` fora de `cmd/`.
+- Sem `init()`. `package main` só na raiz (`main.go`).
 - `internal/execx` é o único lugar que fala com o OS pra binário externo.
+- `go install .` instala o binário `jdwp-wire` (último segmento do module path). Produto/CI usam `go build -o jdt .`.
 
 ---
 
@@ -216,7 +217,7 @@ Em todo PR / step:
 1. `go test ./...`
 2. `gofmt -l` limpo
 3. `golangci-lint run`
-4. `go build ./cmd/jdt`
+4. `go build -o jdt .`
 
 `main` sempre verde. Não push direto na `main`.
 
@@ -240,8 +241,8 @@ Em todo PR / step:
 1. **Issue → branch → PR.** Sem branch órfã. `git checkout -b` só com `#N` no primeiro commit.
 2. **Contrato do módulo no step01.** Tipos + interface + teste do fake *antes* da implementação `adb`. Review valida o desenho barato.
 3. **Fake primeiro, device depois.** Unit não depende de emulador. Integration tag à parte.
-4. **Um comando CLI por PR de wiring.** Implementar `internal/device` não precisa já expor `jdt devices` no mesmo step se inflar o diff. Pode ser o último step.
-5. **Exit codes estáveis.** `0` ok, `2` uso, `3` sem device, `4` ferramenta ausente (`apktool`/`adb`). Documentar na issue do `cli`.
+4. **Um comando CLI por PR de wiring.** Implementar `internal/device` não precisa já expor `jdt devices` no mesmo step se inflar o diff. Pode ser o último step (`cmd/` + `internal/<comando>`).
+5. **Exit codes estáveis.** `0` ok, `2` uso, `3` sem device, `4` ferramenta ausente (`apktool`/`adb`). Documentar na issue do `cmd`.
 6. **Output `--json` é contrato.** Mudou schema = bump documentado na issue, não “ajuste de print”.
 7. **Detect Android CLI, não assumir.** `android -h` / versão; fallback `adb`. Nunca tratar o `android` antigo do SDK como a CLI 1.0.
 8. **Sem log que parece produto.** `slog` com nível. Default humano numa linha por passo (`[skip] patch: already debuggable`).

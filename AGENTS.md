@@ -106,7 +106,7 @@ Frida não é o caminho principal. Entra só quando JDWP sozinho não segura (pi
 
 MVP: `.jdt/<pkg>/idea` com `decode.iml` + `.idea/{misc,modules}.xml` + `.idea/runConfigurations/Remote_Debug.xml`. O smali **não** se copia — o iml aponta `../decode`. Sem Gradle, sem plugin Android, sem escolher o JDK da máquina, sem instalar smalidea.
 
-Não há `jdt project`. O atalho `--studio` no attach é wiring do `cli` (depois de `jdwp` na `main`); até lá o flag imprime skip. `project` não lança o IDE.
+Não há `jdt project`. O atalho `--studio` no attach é wiring do `cmd` (depois de `jdwp` na `main`); até lá o flag imprime skip. `project` não lança o IDE.
 
 Patch destrutivo e Integrity continuam a ser problema de `patch`/`apk`, não deste módulo.
 
@@ -150,7 +150,7 @@ Inclui:
 4. Patch `android:debuggable="true"` no manifest + rebuild + sign debug + install (`-r` / `-d` se necessário).
 5. Launch debugável: `android run --debug --apks=...` se a CLI oficial estiver instalada; senão `am set-debug-app -w` + start + `forward tcp:PORT jdwp:PID`. Probe da porta nos dois caminhos.
 6. `jdt reset` (clear-debug-app + remove forward).
-7. Módulo `project`: escreve o esqueleto IntelliJ em `.jdt/<pkg>/idea` (Remote Debug `localhost:PORT`, content root = decode já existente). O flag `--studio` no attach ainda não chama isto (skip até o wiring no `cli`).
+7. Módulo `project`: escreve o esqueleto IntelliJ em `.jdt/<pkg>/idea` (Remote Debug `localhost:PORT`, content root = decode já existente). O flag `--studio` no attach ainda não chama isto (skip até o wiring no `cmd`).
 8. `jdt targets --http`: grep/parse raso de OkHttp / Retrofit / `HttpURLConnection` no decode; imprime `classe#metodo`.
 9. Log em texto: cada passo, skip, e o one-liner de attach.
 

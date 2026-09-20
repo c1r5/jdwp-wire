@@ -1,4 +1,4 @@
-package cli
+package cmd
 
 import (
 	"errors"
@@ -91,12 +91,12 @@ func run(cfg runConfig) int {
 		cfg.args = []string{}
 	}
 
-	cmd := newRoot(cfg)
-	cmd.SetArgs(cfg.args)
-	cmd.SetOut(cfg.stdout)
-	cmd.SetErr(cfg.stderr)
+	root := newRoot(cfg)
+	root.SetArgs(cfg.args)
+	root.SetOut(cfg.stdout)
+	root.SetErr(cfg.stderr)
 
-	if err := cmd.Execute(); err != nil {
+	if err := root.Execute(); err != nil {
 		if _, werr := fmt.Fprintf(cfg.stderr, "jdt: %v\n", err); werr != nil {
 			return 1
 		}
@@ -106,23 +106,23 @@ func run(cfg runConfig) int {
 }
 
 func newRoot(cfg runConfig) *cobra.Command {
-	cmd := &cobra.Command{
+	root := &cobra.Command{
 		Use:           "jdt",
 		Short:         "attach JDWP debug session from an Android APK/package",
 		SilenceErrors: true,
 		SilenceUsage:  true,
 		Version:       Version,
 	}
-	cmd.SetVersionTemplate("jdt {{.Version}}\n")
-	cmd.CompletionOptions.DisableDefaultCmd = true
-	cmd.PersistentFlags().Bool("json", false, "output JSON")
-	cmd.AddCommand(newDevicesCmd(cfg))
-	cmd.AddCommand(newPullCmd(cfg))
-	cmd.AddCommand(newInstallCmd(cfg))
-	cmd.AddCommand(newPatchCmd(cfg))
-	cmd.AddCommand(newAttachCmd(cfg))
-	cmd.AddCommand(newResetCmd(cfg))
-	return cmd
+	root.SetVersionTemplate("jdt {{.Version}}\n")
+	root.CompletionOptions.DisableDefaultCmd = true
+	root.PersistentFlags().Bool("json", false, "output JSON")
+	root.AddCommand(newDevicesCmd(cfg))
+	root.AddCommand(newPullCmd(cfg))
+	root.AddCommand(newInstallCmd(cfg))
+	root.AddCommand(newPatchCmd(cfg))
+	root.AddCommand(newAttachCmd(cfg))
+	root.AddCommand(newResetCmd(cfg))
+	return root
 }
 
 func exitCode(err error) int {

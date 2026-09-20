@@ -1,4 +1,4 @@
-package cli
+package cmd
 
 import (
 	"context"
@@ -6,48 +6,45 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/c1r5/jdwp-wire/internal/attach"
 	"github.com/c1r5/jdwp-wire/internal/jdwp"
 	"github.com/spf13/cobra"
 )
 
 func newAttachCmd(cfg runConfig) *cobra.Command {
-	cmd := &cobra.Command{
+	c := &cobra.Command{
 		Use:   "attach <pkg>",
 		Short: "Forward JDWP for an already-installed debuggable app (does not patch or install)",
 		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx, cancel := context.WithTimeout(cmd.Context(), cfg.jdwpTimeout)
+		RunE: func(c *cobra.Command, args []string) error {
+			ctx, cancel := context.WithTimeout(c.Context(), cfg.jdwpTimeout)
 			defer cancel()
-			serial, err := cmd.Flags().GetString("serial")
+			serial, err := c.Flags().GetString("serial")
 			if err != nil {
 				return err
 			}
-			port, err := cmd.Flags().GetInt("port")
+			port, err := c.Flags().GetInt("port")
 			if err != nil {
 				return err
 			}
-			asJSON, err := cmd.Flags().GetBool("json")
+			asJSON, err := c.Flags().GetBool("json")
 			if err != nil {
 				return err
 			}
-			dev, err := cfg.device.Resolve(ctx, serial)
-			if err != nil {
-				return err
-			}
-			sess, err := cfg.jdwp.Attach(ctx, dev.Serial, args[0], port)
+			sess, err := attach.Run(ctx, cfg.device, cfg.jdwp, serial, args[0], port)
 			if err != nil {
 				return err
 			}
 			if asJSON {
-				return writeAttachJSON(cmd.OutOrStdout(), sess)
+				return writeAttachJSON(c.OutOrStdout(), sess)
 			}
-			return writeAttachHuman(cmd.OutOrStdout(), sess)
+			return writeAttachHuman(c.OutOrStdout(), sess)
 		},
 	}
-	cmd.Flags().StringP("serial", "s", "", "adb serial (required if multiple devices)")
-	cmd.Flags().Int("port", 8700, "local TCP port to forward")
-	cmd.Flags().Bool("studio", false, "print Studio attach hint (project generation is not wired)")
-	return cmd
+	c.Flags().StringP("serial", "s", "", "adb serial (required if multiple devices)")
+	c.Flags().Int("port", 8700, "local TCP port to forward")
+	c.Flags().Bool("studio", false, "print Studio attach hint (project generation is not wired)")
+	return c
 }
 
 func writeAttachHuman(w io.Writer, sess jdwp.Session) error {

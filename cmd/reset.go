@@ -1,4 +1,4 @@
-package cli
+package cmd
 
 import (
 	"context"
@@ -6,46 +6,43 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/c1r5/jdwp-wire/internal/reset"
 	"github.com/spf13/cobra"
 )
 
 func newResetCmd(cfg runConfig) *cobra.Command {
-	cmd := &cobra.Command{
+	c := &cobra.Command{
 		Use:   "reset <pkg>",
 		Short: "Clear set-debug-app and remove the JDWP forward",
 		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx, cancel := context.WithTimeout(cmd.Context(), cfg.jdwpTimeout)
+		RunE: func(c *cobra.Command, args []string) error {
+			ctx, cancel := context.WithTimeout(c.Context(), cfg.jdwpTimeout)
 			defer cancel()
-			serial, err := cmd.Flags().GetString("serial")
+			serial, err := c.Flags().GetString("serial")
 			if err != nil {
 				return err
 			}
-			port, err := cmd.Flags().GetInt("port")
+			port, err := c.Flags().GetInt("port")
 			if err != nil {
 				return err
 			}
-			asJSON, err := cmd.Flags().GetBool("json")
+			asJSON, err := c.Flags().GetBool("json")
 			if err != nil {
 				return err
 			}
-			dev, err := cfg.device.Resolve(ctx, serial)
+			res, err := reset.Run(ctx, cfg.device, cfg.jdwp, serial, args[0], port)
 			if err != nil {
-				return err
-			}
-			pkg := args[0]
-			if err := cfg.jdwp.Reset(ctx, dev.Serial, pkg, port); err != nil {
 				return err
 			}
 			if asJSON {
-				return writeResetJSON(cmd.OutOrStdout(), pkg, dev.Serial, port)
+				return writeResetJSON(c.OutOrStdout(), res.Package, res.Serial, res.Port)
 			}
-			return writeResetHuman(cmd.OutOrStdout(), pkg, port)
+			return writeResetHuman(c.OutOrStdout(), res.Package, res.Port)
 		},
 	}
-	cmd.Flags().StringP("serial", "s", "", "adb serial (required if multiple devices)")
-	cmd.Flags().Int("port", 8700, "local TCP port whose forward should be removed")
-	return cmd
+	c.Flags().StringP("serial", "s", "", "adb serial (required if multiple devices)")
+	c.Flags().Int("port", 8700, "local TCP port whose forward should be removed")
+	return c
 }
 
 func writeResetHuman(w io.Writer, pkg string, port int) error {
