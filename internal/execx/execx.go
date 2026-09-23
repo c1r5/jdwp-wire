@@ -78,7 +78,9 @@ func (Exec) Run(ctx context.Context, name string, args ...string) (Result, error
 	if cmd.ProcessState != nil {
 		res.ExitCode = cmd.ProcessState.ExitCode()
 	}
-	if err == nil {
+	// A descendant that inherits the pipes makes Wait return ErrWaitDelay after
+	// the process itself has already exited 0. The captured output is complete.
+	if err == nil || (errors.Is(err, exec.ErrWaitDelay) && cmd.ProcessState != nil && cmd.ProcessState.Success()) {
 		return res, nil
 	}
 
