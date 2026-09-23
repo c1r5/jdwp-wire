@@ -20,7 +20,7 @@ func (p *pidSeq) List(context.Context) ([]device.Device, error) { return nil, ni
 func (p *pidSeq) Resolve(context.Context, string) (device.Device, error) {
 	return device.Device{}, nil
 }
-func (p *pidSeq) ListApps(context.Context, string) ([]device.App, error) { return nil, nil }
+func (p *pidSeq) ListApps(context.Context, string, bool) ([]device.App, error) { return nil, nil }
 func (p *pidSeq) Debuggable(context.Context, string, string) (bool, error) {
 	return false, nil
 }

@@ -37,14 +37,14 @@ func TestAppsHumanAndJSON(t *testing.T) {
 	if len(lines) != 3 {
 		t.Fatalf("lines %q", out)
 	}
-	if !strings.Contains(lines[1], "Alpha") || !strings.Contains(lines[1], "com.alpha") {
-		t.Fatalf("first app %q", lines[1])
+	if !strings.Contains(lines[1], "111") || !strings.Contains(lines[1], "com.zeta") {
+		t.Fatalf("running app %q", lines[1])
 	}
-	if strings.Contains(lines[1], "111") {
-		t.Fatalf("stopped app has pid %q", lines[1])
+	if !strings.Contains(lines[2], "Alpha") || !strings.Contains(lines[2], "com.alpha") {
+		t.Fatalf("stopped app %q", lines[2])
 	}
-	if !strings.Contains(lines[2], "111") || !strings.Contains(lines[2], "com.zeta") {
-		t.Fatalf("second app %q", lines[2])
+	if strings.Contains(lines[2], "111") {
+		t.Fatalf("stopped app has pid %q", lines[2])
 	}
 
 	stdout.Reset()
@@ -69,11 +69,52 @@ func TestAppsHumanAndJSON(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &body); err != nil {
 		t.Fatal(err)
 	}
-	if len(body.Apps) != 2 || body.Apps[0].Identifier != "com.alpha" || body.Apps[0].PID != nil {
+	if len(body.Apps) != 2 || body.Apps[0].Identifier != "com.zeta" || body.Apps[0].PID == nil || *body.Apps[0].PID != 111 {
 		t.Fatalf("%+v", body.Apps)
 	}
-	if body.Apps[1].PID == nil || *body.Apps[1].PID != 111 {
+	if body.Apps[1].Identifier != "com.alpha" || body.Apps[1].PID != nil {
 		t.Fatalf("%+v", body.Apps[1])
+	}
+}
+
+func TestAppsHidesSystemUnlessFlag(t *testing.T) {
+	t.Parallel()
+	fake := testDevice()
+	fake.Apps = []device.App{
+		{Package: "com.user", Label: "User"},
+		{Package: "com.android.settings", Label: "Settings", System: true},
+	}
+	var stdout, stderr bytes.Buffer
+	code := run(runConfig{
+		stdout: &stdout,
+		stderr: &stderr,
+		device: fake,
+		args:   []string{"apps"},
+	})
+	if code != ExitOK {
+		t.Fatalf("exit %d stderr=%q", code, stderr.String())
+	}
+	if strings.Contains(stdout.String(), "settings") {
+		t.Fatalf("default listed system app %q", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "com.user") {
+		t.Fatalf("missing user app %q", stdout.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = run(runConfig{
+		stdout: &stdout,
+		stderr: &stderr,
+		device: fake,
+		args:   []string{"apps", "--system"},
+	})
+	if code != ExitOK {
+		t.Fatalf("system exit %d stderr=%q", code, stderr.String())
+	}
+	lines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
+	if len(lines) != 3 || !strings.Contains(lines[1], "com.android.settings") || !strings.Contains(lines[2], "com.user") {
+		t.Fatalf("lines %q", stdout.String())
 	}
 }
 

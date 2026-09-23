@@ -35,6 +35,10 @@ func newPullCmd(cfg runConfig) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			includeSystem, err := c.Flags().GetBool("system")
+			if err != nil {
+				return err
+			}
 			lg := cfg.logger
 			if asJSON {
 				lg = nil
@@ -49,6 +53,7 @@ func newPullCmd(cfg runConfig) *cobra.Command {
 				Serial:  serial,
 				Package: pkgFlag,
 				Decode:  doDecode,
+				System:  includeSystem,
 			})
 			if err != nil {
 				return err
@@ -62,6 +67,7 @@ func newPullCmd(cfg runConfig) *cobra.Command {
 	c.Flags().StringP("serial", "s", "", "adb serial (required if multiple devices)")
 	c.Flags().String("package", "", "package name (required when pulling a local APK file)")
 	c.Flags().Bool("decode", false, "apktool-decode the APK into .jdt/<pkg>/decode")
+	c.Flags().Bool("system", false, "resolve an index against jdt apps --system")
 	return c
 }
 

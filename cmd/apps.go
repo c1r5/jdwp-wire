@@ -18,10 +18,14 @@ const appsTimeout = 30 * time.Second
 func newAppsCmd(cfg runConfig) *cobra.Command {
 	c := &cobra.Command{
 		Use:   "apps",
-		Short: "List installed apps (PID, name, package), like frida-ps -Uai",
+		Short: "List user apps (PID, name, package); --system includes system apps",
 		Long: `List installed packages on the selected device.
 
-IDX is 1-based. jdt pull IDX uses this same ordering. PID is blank when the app is not running.
+By default only third-party packages are listed. --system includes system packages.
+
+Running apps come first. Within that group, and among apps that are not running, rows are ordered by name, then package.
+
+IDX is 1-based. jdt pull IDX uses this same ordering. jdt pull --system IDX matches jdt apps --system. PID is blank when the app is not running.
 
 NAME is the non-localized label when dumpsys package prints one. Otherwise NAME is the package name. Resource labels (@string/app_name) are not resolved.`,
 		Args: cobra.NoArgs,
@@ -32,7 +36,11 @@ NAME is the non-localized label when dumpsys package prints one. Otherwise NAME 
 			if err != nil {
 				return err
 			}
-			entries, err := apps.List(ctx, cfg.device, serial)
+			includeSystem, err := c.Flags().GetBool("system")
+			if err != nil {
+				return err
+			}
+			entries, err := apps.List(ctx, cfg.device, serial, includeSystem)
 			if err != nil {
 				return err
 			}
@@ -47,6 +55,7 @@ NAME is the non-localized label when dumpsys package prints one. Otherwise NAME 
 		},
 	}
 	c.Flags().StringP("serial", "s", "", "adb serial (required if multiple devices)")
+	c.Flags().Bool("system", false, "include system packages")
 	return c
 }
 

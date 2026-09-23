@@ -112,6 +112,41 @@ func TestPullLocalRequiresPackage(t *testing.T) {
 	}
 }
 
+func TestPullSystemIndex(t *testing.T) {
+	t.Parallel()
+	dev := testDevice()
+	dev.Apps = []device.App{
+		{Package: "com.user", Label: "User"},
+		{Package: "com.android.settings", Label: "Settings", System: true},
+	}
+	pulled := ""
+	runPull := func(args ...string) int {
+		var stdout, stderr bytes.Buffer
+		code := run(runConfig{
+			stdout: &stdout,
+			stderr: &stderr,
+			device: dev,
+			apk: &apk.Fake{PullFn: func(_ context.Context, _, pkg string, _ workspace.Layout) (apk.Artifact, error) {
+				pulled = pkg
+				return apk.Artifact{Package: pkg, APK: ".jdt/" + pkg + "/apk/base.apk"}, nil
+			}},
+			args: args,
+		})
+		if code != ExitOK {
+			t.Fatalf("exit %d args %v stderr=%q", code, args, stderr.String())
+		}
+		return code
+	}
+	runPull("pull", "1")
+	if pulled != "com.user" {
+		t.Fatalf("default index %s", pulled)
+	}
+	runPull("pull", "--system", "1")
+	if pulled != "com.android.settings" {
+		t.Fatalf("system index %s", pulled)
+	}
+}
+
 func TestPullByIndex(t *testing.T) {
 	t.Parallel()
 	dev := testDevice()

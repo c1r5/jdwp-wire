@@ -18,12 +18,14 @@ type Entry struct {
 }
 
 // List returns installed apps in the same order jdt apps prints.
-func List(ctx context.Context, c device.Client, serial string) ([]Entry, error) {
+// includeSystem adds system packages. Otherwise only third-party packages are returned.
+// Running apps (PID > 0) come first; each group is ordered by name, then package.
+func List(ctx context.Context, c device.Client, serial string, includeSystem bool) ([]Entry, error) {
 	dev, err := c.Resolve(ctx, serial)
 	if err != nil {
 		return nil, err
 	}
-	raw, err := c.ListApps(ctx, dev.Serial)
+	raw, err := c.ListApps(ctx, dev.Serial, includeSystem)
 	if err != nil {
 		return nil, err
 	}
@@ -43,6 +45,11 @@ func List(ctx context.Context, c device.Client, serial string) ([]Entry, error) 
 		})
 	}
 	sort.Slice(entries, func(i, j int) bool {
+		ri := entries[i].PID > 0
+		rj := entries[j].PID > 0
+		if ri != rj {
+			return ri
+		}
 		ni := strings.ToLower(entries[i].Name)
 		nj := strings.ToLower(entries[j].Name)
 		if ni != nj {
