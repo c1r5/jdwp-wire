@@ -13,8 +13,8 @@ import (
 
 func newPullCmd(cfg runConfig) *cobra.Command {
 	c := &cobra.Command{
-		Use:   "pull <pkg|apk>",
-		Short: "Pull an installed package (base.apk) or copy a local APK into .jdt/",
+		Use:   "pull <index|pkg|apk>",
+		Short: "Pull by jdt apps index, package name, or copy a local APK into .jdt/",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(c *cobra.Command, args []string) error {
 			ctx, cancel := context.WithTimeout(c.Context(), cfg.apkTimeout)

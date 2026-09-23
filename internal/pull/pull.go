@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 
 	"github.com/c1r5/jdwp-wire/internal/apk"
+	"github.com/c1r5/jdwp-wire/internal/apps"
 	"github.com/c1r5/jdwp-wire/internal/device"
 	"github.com/c1r5/jdwp-wire/internal/workspace"
 )
@@ -68,11 +70,42 @@ func fetch(ctx context.Context, deps Deps, req Request) (apk.Artifact, error) {
 	if err != nil {
 		return apk.Artifact{}, err
 	}
-	layout, err := workspace.ForPackage(deps.CWD, req.Target)
+	pkg := req.Target
+	if isAppIndex(pkg) {
+		pkg, err = packageByIndex(ctx, deps, dev.Serial, pkg)
+		if err != nil {
+			return apk.Artifact{}, err
+		}
+	}
+	layout, err := workspace.ForPackage(deps.CWD, pkg)
 	if err != nil {
 		return apk.Artifact{}, err
 	}
-	return deps.APK.Pull(ctx, dev.Serial, req.Target, layout)
+	return deps.APK.Pull(ctx, dev.Serial, pkg, layout)
+}
+
+func packageByIndex(ctx context.Context, deps Deps, serial, raw string) (string, error) {
+	n, err := strconv.Atoi(raw)
+	if err != nil {
+		return "", fmt.Errorf("%w: app index %s", device.ErrUsage, raw)
+	}
+	entries, err := apps.List(ctx, deps.Device, serial)
+	if err != nil {
+		return "", err
+	}
+	return apps.PackageAt(entries, n)
+}
+
+func isAppIndex(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func fileExists(path string) bool {

@@ -20,6 +20,7 @@ func (p *pidSeq) List(context.Context) ([]device.Device, error) { return nil, ni
 func (p *pidSeq) Resolve(context.Context, string) (device.Device, error) {
 	return device.Device{}, nil
 }
+func (p *pidSeq) ListApps(context.Context, string) ([]device.App, error) { return nil, nil }
 func (p *pidSeq) Pidof(_ context.Context, _, _ string) ([]device.Process, error) {
 	i := p.n
 	if i >= len(p.seq) {

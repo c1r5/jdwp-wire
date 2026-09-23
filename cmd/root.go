@@ -118,6 +118,7 @@ func newRoot(cfg runConfig) *cobra.Command {
 	root.CompletionOptions.DisableDefaultCmd = true
 	root.PersistentFlags().Bool("json", false, "output JSON")
 	root.AddCommand(newDevicesCmd(cfg))
+	root.AddCommand(newAppsCmd(cfg))
 	root.AddCommand(newPullCmd(cfg))
 	root.AddCommand(newInstallCmd(cfg))
 	root.AddCommand(newPatchCmd(cfg))

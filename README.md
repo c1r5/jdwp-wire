@@ -4,7 +4,7 @@ CLI (`jdt`) that turns an Android APK/package into a JDWP session usable from An
 
 This is not MobSF. It is not Frida-first. The main path is **smali/Java + JVM debugger**.
 
-Status: **MVP in progress**. Wired so far: `jdt devices`, `jdt pull`, `jdt patch`, `jdt install`, `jdt attach`, `jdt reset`, `jdt targets`. `--studio` project gen is not wired. `--crypto` on targets is v1.
+Status: **MVP in progress**. Wired so far: `jdt devices`, `jdt apps`, `jdt pull`, `jdt patch`, `jdt install`, `jdt attach`, `jdt reset`, `jdt targets`. `--studio` project gen is not wired. `--crypto` on targets is v1. `jdt apps` lists installed packages (PID when running); `jdt pull <index>` uses that list.
 
 Happy path (`com.alvo` is the package). With more than one device, pass `-s <serial>` on `pull`, `install`, and `attach`.
 
@@ -58,7 +58,10 @@ go install .          # binário GOBIN: jdwp-wire (module path)
 ./jdt --help
 ./jdt devices
 ./jdt devices --json
+./jdt apps
+./jdt apps --json
 ./jdt pull com.alvo
+./jdt pull 2
 ./jdt pull --decode com.alvo
 ./jdt pull ./app.apk --package com.alvo
 ./jdt patch .jdt/com.alvo/decode

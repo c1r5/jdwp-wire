@@ -45,6 +45,14 @@ type Process struct {
 	Package string // "com.alvo" or "com.alvo:remote"
 }
 
+// App is an installed package. Label is empty when the device did not
+// print a non-localized name. PID is 0 when nothing is running.
+type App struct {
+	Package string
+	Label   string
+	PID     int
+}
+
 // Client lists devices and processes. Temporary: move to the consumer
 // (cli/jdwp) when that shape stabilizes. Fake shared across modules
 // justifies keeping it here for the MVP.
@@ -52,4 +60,5 @@ type Client interface {
 	List(ctx context.Context) ([]Device, error)
 	Resolve(ctx context.Context, serial string) (Device, error)
 	Pidof(ctx context.Context, serial, pkg string) ([]Process, error)
+	ListApps(ctx context.Context, serial string) ([]App, error)
 }

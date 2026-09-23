@@ -109,6 +109,50 @@ func TestPullLocalRequiresPackage(t *testing.T) {
 	}
 }
 
+func TestPullByIndex(t *testing.T) {
+	t.Parallel()
+	dev := testDevice()
+	dev.Apps = []device.App{
+		{Package: "com.zeta", Label: "Zeta"},
+		{Package: "com.alpha", Label: "Alpha"},
+	}
+	var stdout, stderr bytes.Buffer
+	code := run(runConfig{
+		stdout: &stdout,
+		stderr: &stderr,
+		device: dev,
+		apk: &apk.Fake{PullFn: func(_ context.Context, _, pkg string, _ workspace.Layout) (apk.Artifact, error) {
+			if pkg != "com.alpha" {
+				t.Fatalf("pkg %s", pkg)
+			}
+			return apk.Artifact{Package: pkg, APK: ".jdt/com.alpha/apk/base.apk"}, nil
+		}},
+		args: []string{"pull", "1"},
+	})
+	if code != ExitOK {
+		t.Fatalf("exit %d stderr=%q", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "com.alpha") {
+		t.Fatalf("stdout %q", stdout.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = run(runConfig{
+		stdout: &stdout,
+		stderr: &stderr,
+		device: dev,
+		apk:    &apk.Fake{},
+		args:   []string{"pull", "9"},
+	})
+	if code != ExitUsage {
+		t.Fatalf("exit %d want %d stderr=%q", code, ExitUsage, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "out of range") {
+		t.Fatalf("stderr %q", stderr.String())
+	}
+}
+
 func TestPullNoDevice(t *testing.T) {
 	t.Parallel()
 	var stdout, stderr bytes.Buffer
