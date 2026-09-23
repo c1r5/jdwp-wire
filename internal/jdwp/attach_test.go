@@ -89,6 +89,29 @@ func TestBindSkipsLaunch(t *testing.T) {
 	}
 }
 
+func TestBindReadsStreamingJDWP(t *testing.T) {
+	t.Parallel()
+	port := listenLocal(t)
+	a := New(&execx.Fake{RunFn: func(ctx context.Context, _ string, args ...string) (execx.Result, error) {
+		if len(args) >= 3 && args[2] == "jdwp" {
+			<-ctx.Done()
+			return execx.Result{Stdout: "4242\n"}, ctx.Err()
+		}
+		return execx.Result{}, nil
+	}}, &device.Fake{Procs: map[string][]device.Process{
+		"com.alvo": {{PID: 4242, Package: "com.alvo"}},
+	}})
+	a.poll = 0
+	a.listFor = 20 * time.Millisecond
+	got, err := a.Bind(withTimeout(t), "emu", "com.alvo", port)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.PID != 4242 || got.Port != port {
+		t.Fatalf("%+v", got)
+	}
+}
+
 func TestAttachSession(t *testing.T) {
 	t.Parallel()
 	port := listenLocal(t)

@@ -8,13 +8,14 @@ import (
 )
 
 type ADB struct {
-	r    execx.Runner
-	d    device.Client
-	poll time.Duration
+	r       execx.Runner
+	d       device.Client
+	poll    time.Duration
+	listFor time.Duration
 }
 
 func New(r execx.Runner, d device.Client) *ADB {
-	return &ADB{r: r, d: d, poll: 200 * time.Millisecond}
+	return &ADB{r: r, d: d, poll: 200 * time.Millisecond, listFor: 2 * time.Second}
 }
 
 var _ Client = (*ADB)(nil)
