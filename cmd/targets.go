@@ -6,6 +6,7 @@ import (
 	"io"
 	"path/filepath"
 
+	"github.com/c1r5/jdwp-wire/internal/logging"
 	"github.com/c1r5/jdwp-wire/internal/targets"
 	"github.com/spf13/cobra"
 )
@@ -41,17 +42,17 @@ func newTargetsCmd(cfg runConfig) *cobra.Command {
 			if asJSON {
 				return writeTargetsJSON(c.OutOrStdout(), res)
 			}
-			return writeTargetsHuman(c.OutOrStdout(), res)
+			return writeTargetsHuman(cfg.logger, c.OutOrStdout(), res)
 		},
 	}
 	c.Flags().Bool("http", true, "list HTTP sinks (OkHttp, Retrofit, HttpURLConnection)")
 	return c
 }
 
-func writeTargetsHuman(w io.Writer, res targets.Result) error {
+func writeTargetsHuman(lg *logging.Logger, w io.Writer, res targets.Result) error {
 	if len(res.Hits) == 0 {
-		_, err := fmt.Fprintln(w, "[skip] targets: no http sinks")
-		return err
+		lg.Skip("targets", "no http sinks")
+		return nil
 	}
 	for _, h := range res.Hits {
 		if _, err := fmt.Fprintf(w, "%s#%s\n", h.Class, h.Method); err != nil {

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/c1r5/jdwp-wire/internal/apk"
+	"github.com/c1r5/jdwp-wire/internal/logging"
 	"github.com/c1r5/jdwp-wire/internal/patch"
 	"github.com/c1r5/jdwp-wire/internal/workspace"
 )
@@ -17,6 +18,8 @@ type Deps struct {
 	Patch      patch.Applier
 	CWD        string
 	APKTimeout time.Duration
+	// Log is written as each step finishes. Nil stays quiet.
+	Log *logging.Logger
 }
 
 // Request is the parsed input for jdt patch.
@@ -51,7 +54,8 @@ func Run(ctx context.Context, deps Deps, req Request) (patch.Result, error) {
 		if err != nil {
 			return patch.Result{}, err
 		}
-		return deps.Patch.Apply(dec.Dir)
+		deps.Log.OK("decode", dec.Dir)
+		return applyAndLog(deps, dec.Dir)
 	}
 	if req.DecodeDir == "" {
 		return patch.Result{}, fmt.Errorf("%w: decoded_dir or --apk required", patch.ErrUsage)
@@ -63,7 +67,25 @@ func Run(ctx context.Context, deps Deps, req Request) (patch.Result, error) {
 	if !st.IsDir() {
 		return patch.Result{}, fmt.Errorf("%w: decoded_dir must be a directory", patch.ErrUsage)
 	}
-	return deps.Patch.Apply(req.DecodeDir)
+	return applyAndLog(deps, req.DecodeDir)
+}
+
+func applyAndLog(deps Deps, dir string) (patch.Result, error) {
+	res, err := deps.Patch.Apply(dir)
+	if err != nil {
+		return patch.Result{}, err
+	}
+	if res.Debuggable == patch.ActionApplied {
+		deps.Log.OK("patch", "debuggable")
+	} else {
+		deps.Log.Skip("patch", "already debuggable")
+	}
+	if res.NSC == patch.ActionApplied {
+		deps.Log.OK("patch", "nsc user CA")
+	} else {
+		deps.Log.Skip("patch", "nsc already trusts user CA")
+	}
+	return res, nil
 }
 
 func fileExists(path string) bool {

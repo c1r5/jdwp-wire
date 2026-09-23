@@ -6,11 +6,14 @@ import (
 )
 
 type Fake struct {
-	Devices []Device
-	Procs   map[string][]Process
-	Apps    []App
-	ListErr error
-	AppsErr error
+	Devices       []Device
+	Procs         map[string][]Process
+	Apps          []App
+	DebugPackages map[string]bool
+	Missing       map[string]bool
+	ListErr       error
+	AppsErr       error
+	DebugErr      error
 }
 
 func (f *Fake) List(context.Context) ([]Device, error) {
@@ -44,6 +47,19 @@ func (f *Fake) ListApps(_ context.Context, serial string) ([]App, error) {
 	out := make([]App, len(f.Apps))
 	copy(out, f.Apps)
 	return out, nil
+}
+
+func (f *Fake) Debuggable(_ context.Context, serial, pkg string) (bool, error) {
+	if serial == "" || pkg == "" {
+		return false, fmt.Errorf("device: debuggable: %w", ErrUsage)
+	}
+	if f.DebugErr != nil {
+		return false, fmt.Errorf("device: debuggable: %w", f.DebugErr)
+	}
+	if f.Missing[pkg] {
+		return false, fmt.Errorf("device: debuggable: %w", ErrPackageNotFound)
+	}
+	return f.DebugPackages[pkg], nil
 }
 
 func (f *Fake) Pidof(_ context.Context, serial, pkg string) ([]Process, error) {

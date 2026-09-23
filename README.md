@@ -4,7 +4,7 @@ CLI (`jdt`) that turns an Android APK/package into a JDWP session usable from An
 
 This is not MobSF. It is not Frida-first. The main path is **smali/Java + JVM debugger**.
 
-Status: **MVP in progress**. Wired so far: `jdt devices`, `jdt apps`, `jdt pull`, `jdt patch`, `jdt install`, `jdt attach`, `jdt reset`, `jdt targets`. `jdt attach --studio` writes `.jdt/<pkg>/idea` after the JDWP forward and does not launch Android Studio. `--crypto` on targets is v1. `jdt apps` lists installed packages (PID when running); `jdt pull <index>` uses that list.
+Status: **MVP wired**. `jdt devices`, `jdt apps`, `jdt pull`, `jdt patch`, `jdt install`, `jdt attach`, `jdt reset`, `jdt targets`. `jdt attach` always pulls and decodes into `.jdt/<pkg>`, patches whatever is still missing, re-signs, and reinstalls, then forwards JDWP. An apktool tree or a patch that is already applied is skipped on its own; the later steps still run. When the official Android CLI is on PATH, install and launch use `android run --debug`; otherwise `adb` + `am`. `jdt attach --studio` writes `.jdt/<pkg>/idea` after the forward and does not launch Android Studio. `--crypto` on targets is v1. `jdt apps` lists installed packages (PID when running); `jdt pull <index>` uses that list.
 
 Happy path (`com.alvo` is the package). With more than one device, pass `-s <serial>` on `pull`, `install`, and `attach`.
 
@@ -35,15 +35,15 @@ Happy path (`com.alvo` is the package). With more than one device, pass `-s <ser
                              v
 ┌─ 5. attach ───────────────────────────────────────────┐
 │ jdt attach com.alvo --port 8700 --studio              │
-│ set-debug-app -w, launch, adb forward, probe          │
+│ repack if not debuggable, then forward + probe        │
 │ → .jdt/com.alvo/idea                                  │
-│ → attach: localhost:8700                              │
+│ → 15:04:05 [ok] [attach] 127.0.0.1:8700               │
 └────────────────────────────┬──────────────────────────┘
                              │
                              v
 ┌─ 6. breakpoint ───────────────────────────────────────┐
 │ Android Studio → Remote JVM Debug                     │
-│ host localhost, port 8700                             │
+│ host 127.0.0.1, port 8700                             │
 └────────────────────────────┬──────────────────────────┘
                              │
                              v

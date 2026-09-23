@@ -38,11 +38,19 @@ func (a *ADB) waitPID(ctx context.Context, serial, pkg string) (int, error) {
 }
 
 func (a *ADB) jdwpHas(ctx context.Context, serial string, pid int) (bool, error) {
-	res, err := a.r.Run(ctx, "adb", "-s", serial, "jdwp")
-	if errors.Is(err, execx.ErrExit) {
-		return false, nil
+	// adb jdwp prints the pid list and then stays open. Bound the read so the
+	// parent attach context is not spent waiting for a process that never exits.
+	wait := a.listFor
+	if wait <= 0 {
+		wait = 2 * time.Second
 	}
-	if err != nil {
+	listCtx, cancel := context.WithTimeout(ctx, wait)
+	defer cancel()
+	res, err := a.r.Run(listCtx, "adb", "-s", serial, "jdwp")
+	if ctx.Err() != nil {
+		return false, fmt.Errorf("jdwp: wait: %w", ctx.Err())
+	}
+	if err != nil && !errors.Is(err, execx.ErrExit) && !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, context.Canceled) {
 		return false, wrapRun("wait", "adb", res.Stderr, err)
 	}
 	for _, n := range parseJDWP(res.Stdout) {

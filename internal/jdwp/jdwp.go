@@ -25,5 +25,7 @@ type Session struct {
 // justifies keeping it here for the MVP.
 type Client interface {
 	Attach(ctx context.Context, serial, pkg string, port int) (Session, error)
+	// Bind waits for the package PID and forwards. It does not open the JDWP socket.
+	Bind(ctx context.Context, serial, pkg string, port int) (Session, error)
 	Reset(ctx context.Context, serial, pkg string, port int) error
 }

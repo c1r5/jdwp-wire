@@ -12,6 +12,7 @@ var (
 	ErrDeviceUnusable  = errors.New("device unusable")
 	ErrToolMissing     = errors.New("tool missing")
 	ErrUsage           = errors.New("usage")
+	ErrPackageNotFound = errors.New("package not installed")
 )
 
 type State string
@@ -61,4 +62,5 @@ type Client interface {
 	Resolve(ctx context.Context, serial string) (Device, error)
 	Pidof(ctx context.Context, serial, pkg string) ([]Process, error)
 	ListApps(ctx context.Context, serial string) ([]App, error)
+	Debuggable(ctx context.Context, serial, pkg string) (bool, error)
 }

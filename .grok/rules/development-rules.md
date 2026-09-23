@@ -30,6 +30,7 @@ jdwp-wire/
     project/
     targets/
     androidcli/          # detect + shell-out da Android CLI oficial
+    logging/             # passos humanos; único importador da lib de log
     workspace/           # ./.jdt/<package>/
   testdata/              # APKs minúsculos, manifests, fixtures
   scripts/               # helpers locais (worktree, stack), não é produto
@@ -40,7 +41,7 @@ Regras de forma:
 
 - `cmd/` não contém regra de negócio (só Cobra + apresentação).
 - Pacote novo só em `internal/<modulo>`. API pública do módulo = o que `cmd` e outros `internal` importam.
-- Dependência entre módulos é acíclica. Sentido permitido: `execx` ← `device`/`apk`/`androidcli` ← `jdwp`/`patch`/`project`/`targets` ← orch por comando ← `cmd` ← `main`.
+- Dependência entre módulos é acíclica. Sentido permitido: `execx` ← `device`/`apk`/`androidcli` ← `jdwp`/`patch`/`project`/`targets` ← orch por comando ← `cmd` ← `main`. `logging` é folha: `cmd`, a orch e `jdwp` chamam o logger; só esse pacote importa a lib.
 - Sem estado global de ADB (lição do repo antigo).
 - Sem `init()`. `package main` só na raiz (`main.go`).
 - `internal/execx` é o único lugar que fala com o OS pra binário externo.
@@ -245,7 +246,7 @@ Em todo PR / step:
 5. **Exit codes estáveis.** `0` ok, `2` uso, `3` sem device, `4` ferramenta ausente (`apktool`/`adb`). Documentar na issue do `cmd`.
 6. **Output `--json` é contrato.** Mudou schema = bump documentado na issue, não “ajuste de print”.
 7. **Detect Android CLI, não assumir.** `android -h` / versão; fallback `adb`. Nunca tratar o `android` antigo do SDK como a CLI 1.0.
-8. **Sem log que parece produto.** `slog` com nível. Default humano numa linha por passo (`[skip] patch: already debuggable`).
+8. **Sem log que parece produto.** Passo humano sai de `internal/logging`, uma linha `HH:MM:SS [ok|skip] [módulo] ação` (ex.: `15:04:05 [skip] [patch] already debuggable`). Trocar a lib de log fica nesse pacote.
 9. **Proibido estado estático mutável** em wrapper de ferramenta. Cada chamada é `execx.Run(ctx, name, args...)`.
 10. **Spike tem data de morte.** `spike/*` não recebe review de produto. Ou vira spec+feat ou morre.
 11. **Não commitar arquivo gerado pelo Studio** (`.idea` de verdade). `project` *escreve* um xml mínimo em `.jdt/`, versionamos só o *template* em `internal/project/testdata`.

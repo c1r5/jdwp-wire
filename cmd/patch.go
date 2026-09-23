@@ -33,11 +33,16 @@ func newPatchCmd(cfg runConfig) *cobra.Command {
 			if len(args) == 1 {
 				decodeDir = args[0]
 			}
+			lg := cfg.logger
+			if asJSON {
+				lg = nil
+			}
 			res, err := patchapply.Run(c.Context(), patchapply.Deps{
 				APK:        cfg.apk,
 				Patch:      cfg.patch,
 				CWD:        cfg.cwd,
 				APKTimeout: cfg.apkTimeout,
+				Log:        lg,
 			}, patchapply.Request{
 				DecodeDir: decodeDir,
 				APK:       apkFlag,
@@ -52,34 +57,12 @@ func newPatchCmd(cfg runConfig) *cobra.Command {
 			if asJSON {
 				return writePatchJSON(c.OutOrStdout(), res)
 			}
-			return writePatchHuman(c.OutOrStdout(), res)
+			return nil
 		},
 	}
 	c.Flags().String("apk", "", "local APK to decode then patch (requires --package)")
 	c.Flags().String("package", "", "package name (required with --apk)")
 	return c
-}
-
-func writePatchHuman(w io.Writer, res patch.Result) error {
-	if res.Debuggable == patch.ActionApplied {
-		if _, err := fmt.Fprintln(w, "[ok] patch: debuggable"); err != nil {
-			return err
-		}
-	} else {
-		if _, err := fmt.Fprintln(w, "[skip] patch: already debuggable"); err != nil {
-			return err
-		}
-	}
-	if res.NSC == patch.ActionApplied {
-		if _, err := fmt.Fprintln(w, "[ok] patch: nsc user CA"); err != nil {
-			return err
-		}
-	} else {
-		if _, err := fmt.Fprintln(w, "[skip] patch: nsc already trusts user CA"); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 type patchJSON struct {

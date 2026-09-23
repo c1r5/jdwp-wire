@@ -15,12 +15,15 @@ import (
 )
 
 func testDevice() *device.Fake {
-	return &device.Fake{Devices: []device.Device{{
-		Serial: "emulator-5554",
-		State:  device.StateDevice,
-		Kind:   device.KindEmulator,
-		Model:  "phone",
-	}}}
+	return &device.Fake{
+		Devices: []device.Device{{
+			Serial: "emulator-5554",
+			State:  device.StateDevice,
+			Kind:   device.KindEmulator,
+			Model:  "phone",
+		}},
+		DebugPackages: map[string]bool{"com.alvo": true},
+	}
 }
 
 func TestPullHuman(t *testing.T) {
@@ -46,13 +49,13 @@ func TestPullHuman(t *testing.T) {
 		t.Fatalf("exit %d stderr=%q", code, stderr.String())
 	}
 	out := stdout.String()
-	if !strings.Contains(out, "[ok] pull: com.alvo") {
+	if !strings.Contains(out, "[ok] [pull] com.alvo") {
 		t.Fatalf("stdout=%q", out)
 	}
 	if !strings.Contains(out, "base.apk") {
 		t.Fatalf("path missing: %q", out)
 	}
-	if !strings.Contains(out, "[ok] pull: .jdt/com.alvo/apk/split_config.xxhdpi.apk") {
+	if !strings.Contains(out, "[ok] [pull] .jdt/com.alvo/apk/split_config.xxhdpi.apk") {
 		t.Fatalf("split missing: %q", out)
 	}
 }
@@ -215,6 +218,9 @@ func TestPullDecode(t *testing.T) {
 				return apk.Artifact{Package: "com.alvo", APK: filepath.Join(layout.APK, "base.apk")}, nil
 			},
 			DecodeFn: func(_ context.Context, apkPath string, layout workspace.Layout) (apk.Decoded, error) {
+				if !strings.Contains(stdout.String(), "[ok] [pull] com.alvo") {
+					t.Fatalf("pull should be logged before decode, stdout=%q", stdout.String())
+				}
 				decodedFrom = apkPath
 				decodeDir = layout.Decode
 				return apk.Decoded{Package: "com.alvo", Dir: layout.Decode}, nil
@@ -230,10 +236,10 @@ func TestPullDecode(t *testing.T) {
 		t.Fatalf("decode src %q want %q", decodedFrom, wantAPK)
 	}
 	out := stdout.String()
-	if !strings.Contains(out, "[ok] pull: com.alvo") {
+	if !strings.Contains(out, "[ok] [pull] com.alvo") {
 		t.Fatalf("stdout=%q", out)
 	}
-	if !strings.Contains(out, "[ok] decode: "+decodeDir) {
+	if !strings.Contains(out, "[ok] [decode] "+decodeDir) {
 		t.Fatalf("stdout=%q", out)
 	}
 }
@@ -309,7 +315,7 @@ func TestPullDecodeLocalAPK(t *testing.T) {
 	if decodedFrom == "" {
 		t.Fatal("decode not called")
 	}
-	if !strings.Contains(stdout.String(), "[ok] decode:") {
+	if !strings.Contains(stdout.String(), "[ok] [decode] ") {
 		t.Fatalf("stdout=%q", stdout.String())
 	}
 }

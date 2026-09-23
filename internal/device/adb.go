@@ -51,6 +51,21 @@ func (a *ADB) Resolve(ctx context.Context, serial string) (Device, error) {
 	return d, nil
 }
 
+func (a *ADB) Debuggable(ctx context.Context, serial, pkg string) (bool, error) {
+	if serial == "" || pkg == "" {
+		return false, fmt.Errorf("device: debuggable: %w", ErrUsage)
+	}
+	res, err := a.r.Run(ctx, "adb", "-s", serial, "shell", "dumpsys", "package", pkg)
+	if err != nil {
+		return false, wrapADB("debuggable", err)
+	}
+	ok, err := parseDebuggable(res.Stdout, pkg)
+	if err != nil {
+		return false, fmt.Errorf("device: debuggable: %w", err)
+	}
+	return ok, nil
+}
+
 func (a *ADB) ListApps(ctx context.Context, serial string) ([]App, error) {
 	if serial == "" {
 		return nil, fmt.Errorf("device: apps: %w", ErrUsage)

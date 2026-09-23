@@ -35,10 +35,15 @@ func newPullCmd(cfg runConfig) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			lg := cfg.logger
+			if asJSON {
+				lg = nil
+			}
 			res, err := pull.Run(ctx, pull.Deps{
 				Device: cfg.device,
 				APK:    cfg.apk,
 				CWD:    cfg.cwd,
+				Log:    lg,
 			}, pull.Request{
 				Target:  args[0],
 				Serial:  serial,
@@ -51,13 +56,6 @@ func newPullCmd(cfg runConfig) *cobra.Command {
 			if asJSON {
 				return writePullJSON(c.OutOrStdout(), res.Artifact, res.DecodeDir)
 			}
-			if err := writePullHuman(c.OutOrStdout(), res.Artifact); err != nil {
-				return err
-			}
-			if doDecode {
-				_, err := fmt.Fprintf(c.OutOrStdout(), "[ok] decode: %s\n", res.DecodeDir)
-				return err
-			}
 			return nil
 		},
 	}
@@ -65,18 +63,6 @@ func newPullCmd(cfg runConfig) *cobra.Command {
 	c.Flags().String("package", "", "package name (required when pulling a local APK file)")
 	c.Flags().Bool("decode", false, "apktool-decode the APK into .jdt/<pkg>/decode")
 	return c
-}
-
-func writePullHuman(w io.Writer, art apk.Artifact) error {
-	if _, err := fmt.Fprintf(w, "[ok] pull: %s → %s\n", art.Package, art.APK); err != nil {
-		return err
-	}
-	for _, s := range art.Splits {
-		if _, err := fmt.Fprintf(w, "[ok] pull: %s\n", s); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 type pullJSON struct {

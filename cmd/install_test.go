@@ -43,7 +43,7 @@ func TestInstallHuman(t *testing.T) {
 	if gotSerial != "emulator-5554" || gotAPK != src {
 		t.Fatalf("install %s %s", gotSerial, gotAPK)
 	}
-	if !strings.Contains(stdout.String(), "[ok] install:") {
+	if !strings.Contains(stdout.String(), "[ok] [install] ") {
 		t.Fatalf("stdout=%q", stdout.String())
 	}
 }
@@ -211,13 +211,13 @@ func TestInstallSignsAPK(t *testing.T) {
 		t.Fatalf("keystore %s", gotKS)
 	}
 	out := stdout.String()
-	if strings.Contains(out, "[ok] encode:") {
+	if strings.Contains(out, "[ok] [encode] ") {
 		t.Fatalf("encode line on apk: %q", out)
 	}
-	if !strings.Contains(out, "[ok] sign: "+src) {
+	if !strings.Contains(out, "[ok] [sign] "+src) {
 		t.Fatalf("stdout=%q", out)
 	}
-	if !strings.Contains(out, "[ok] install: "+src) {
+	if !strings.Contains(out, "[ok] [install] "+src) {
 		t.Fatalf("stdout=%q", out)
 	}
 }
@@ -250,6 +250,9 @@ func TestInstallEncodeFromDecodeDir(t *testing.T) {
 			},
 			SignFn: func(_ context.Context, apkPath, _ string) (apk.Artifact, error) {
 				steps = append(steps, "sign")
+				if !strings.Contains(stdout.String(), "[ok] [encode] "+wantAPK) {
+					t.Fatalf("encode should be logged before sign, stdout=%q", stdout.String())
+				}
 				if apkPath != wantAPK {
 					t.Fatalf("sign %s", apkPath)
 				}
@@ -257,6 +260,9 @@ func TestInstallEncodeFromDecodeDir(t *testing.T) {
 			},
 			InstallFn: func(_ context.Context, _ string, apks ...string) error {
 				steps = append(steps, "install")
+				if !strings.Contains(stdout.String(), "[ok] [sign] "+wantAPK) {
+					t.Fatalf("sign should be logged before install, stdout=%q", stdout.String())
+				}
 				if len(apks) != 1 || apks[0] != wantAPK {
 					t.Fatalf("install %v", apks)
 				}
@@ -272,13 +278,13 @@ func TestInstallEncodeFromDecodeDir(t *testing.T) {
 		t.Fatalf("steps %v", steps)
 	}
 	out := stdout.String()
-	if !strings.Contains(out, "[ok] encode: "+wantAPK) {
+	if !strings.Contains(out, "[ok] [encode] "+wantAPK) {
 		t.Fatalf("stdout=%q", out)
 	}
-	if !strings.Contains(out, "[ok] sign: "+wantAPK) {
+	if !strings.Contains(out, "[ok] [sign] "+wantAPK) {
 		t.Fatalf("stdout=%q", out)
 	}
-	if !strings.Contains(out, "[ok] install: "+wantAPK) {
+	if !strings.Contains(out, "[ok] [install] "+wantAPK) {
 		t.Fatalf("stdout=%q", out)
 	}
 }
@@ -485,7 +491,7 @@ func TestInstallSplitsFromPackage(t *testing.T) {
 		t.Fatalf("copied split %q err %v", b, err)
 	}
 	out := stdout.String()
-	if !strings.Contains(out, "[ok] install: "+wantBase) || !strings.Contains(out, "[ok] install: "+wantSplit) {
+	if !strings.Contains(out, "[ok] [install] "+wantBase) || !strings.Contains(out, "[ok] [install] "+wantSplit) {
 		t.Fatalf("stdout=%q", out)
 	}
 }

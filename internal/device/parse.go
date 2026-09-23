@@ -6,6 +6,34 @@ import (
 	"strings"
 )
 
+func parseDebuggable(stdout, pkg string) (bool, error) {
+	if strings.Contains(stdout, "Unable to find package: "+pkg) {
+		return false, ErrPackageNotFound
+	}
+	for _, line := range strings.Split(stdout, "\n") {
+		line = strings.TrimSpace(line)
+		body, ok := flagBody(line)
+		if !ok {
+			continue
+		}
+		for _, tok := range strings.Fields(body) {
+			if tok == "DEBUGGABLE" {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
+}
+
+func flagBody(line string) (string, bool) {
+	for _, prefix := range []string{"pkgFlags=[", "flags=["} {
+		if strings.HasPrefix(line, prefix) && strings.HasSuffix(line, "]") {
+			return strings.TrimSuffix(strings.TrimPrefix(line, prefix), "]"), true
+		}
+	}
+	return "", false
+}
+
 func parseDevices(stdout string) []Device {
 	var out []Device
 	for _, line := range strings.Split(stdout, "\n") {

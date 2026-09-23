@@ -79,7 +79,7 @@ Atalho do dia a dia (MVP):
 jdt attach com.alvo --port 8700 --studio
 ```
 
-Faz o máximo que o MVP cobrir e imprime o que falta (ex.: “app já debuggable, skip patch”).
+O pipeline do attach começa no decode e termina no install, e em seguida faz `adb -s <serial> forward tcp:PORT jdwp:PID` só se esse serial ainda estiver ligado. Etapa já feita é skip só dela: árvore apktool existente não volta a puxar; manifest já debuggable ou com NSC de CA do usuário não repete essa parte do patch. O install e o resto correm na mesma. `android run --debug` entra nesse install quando a CLI 1.0 está no PATH. Sem a CLI, `adb install` e `am`. O debugger no host liga em `127.0.0.1:PORT` (o `adb forward` escuta em IPv4). O attach não abre esse socket: a primeira ligação JDWP é o handshake, e um probe TCP fecha-o antes do Android Studio.
 
 ---
 
@@ -92,11 +92,12 @@ Faz o máximo que o MVP cobrir e imprime o que falta (ex.: “app já debuggable
 | `apk`     | pull, splits, apktool, sign                | pull + decode + sign + install-multiple (sem merge) | AAB |
 | `patch`   | `debuggable=true`, NSC user CA             | sim | extractNativeLibs, keep signature se possível |
 | `jdwp`    | set-debug-app, wait, forward, healthcheck  | sim | retry / process spawn vs attach |
-| `project` | esqueleto IntelliJ em `.jdt/<pkg>/idea` (content root = decode) + Remote JVM Debug `localhost:PORT` | sim (`attach --studio` escreve depois do forward) | JADX sources opcional |
+| `project` | esqueleto IntelliJ em `.jdt/<pkg>/idea` (content root = decode) + Remote JVM Debug `127.0.0.1:PORT` | sim (`attach --studio` escreve depois do forward) | JADX sources opcional |
 | `targets` | sinks HTTP/crypto no smali/java            | lista OkHttp/Retrofit/HttpURLConnection | Cipher / pinning classes |
 | `capture` | dump JDWP do frame → JSON/HAR              | não | `watch --dump-okhttp` |
 | `frida`   | companion unpin / hide-debugger            | não | `--unpin` opcional |
 | `android` | shell-out p/ Android CLI se estiver no PATH | detect + `run --debug` | emulator, layout |
+| `logging` | linha humana `HH:MM:SS [ok\|skip] [módulo] ação`; só este pacote importa a lib de log | sim | — |
 
 Frida não é o caminho principal. Entra só quando JDWP sozinho não segura (pinning, anti-debug).
 
@@ -130,7 +131,7 @@ Encaixe útil:
 | `android layout` / `screen capture` / `screen resolve` | [v1+] dirigir UI até o sink, sem Appium |
 | `android init` + skills | se um agente for orquestrar o `jdt` |
 
-MVP: se `android` existir, `jdt attach` usa `android run --debug --apks=...` depois do patch. Se não existir, fallback `adb` + `am` (já planejado). Não tornar Android CLI dependência dura.
+MVP: se `android` for a CLI 1.0 (`run --apks` / `--debug`), `jdt attach` usa `android run --debug --apks=... --install-options=-r,-d` depois do patch. O binário antigo do SDK conta como ausente. Exit 0 com `INSTALL_FAILED` no texto é erro. Sem a CLI, fallback `adb install` + `am set-debug-app -w`. Assinatura diferente (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`) faz `adb uninstall` e tenta de novo. Probe da porta nos dois caminhos. Não tornar Android CLI dependência dura.
 
 Não usar no MVP: `android create`, `docs`, Journeys, skills. Isso é dev de app greenfield, não RE.
 
@@ -150,11 +151,11 @@ Inclui:
 2. Reescrita do attach sem estado global no ADB.
 3. `pull` do package instalado (base.apk no mínimo).
 4. Patch `android:debuggable="true"` no manifest + rebuild + sign debug + install (`-r` / `-d` se necessário).
-5. Launch debugável: `android run --debug --apks=...` se a CLI oficial estiver instalada; senão `am set-debug-app -w` + start + `forward tcp:PORT jdwp:PID`. Probe da porta nos dois caminhos.
+5. Launch debugável: o attach faz decode, patch (skip do que já está feito) e install. `android run --debug --apks=...` se a CLI oficial 1.0 estiver instalada; senão `adb install` + `am set-debug-app -w` + `forward tcp:PORT jdwp:PID`. Probe da porta nos dois caminhos.
 6. `jdt reset` (clear-debug-app + remove forward).
-7. Módulo `project`: escreve o esqueleto IntelliJ em `.jdt/<pkg>/idea` (Remote Debug `localhost:PORT`, content root = decode já existente). `jdt attach --studio` chama isto depois do forward. Sem decode, imprime skip e o attach segue.
+7. Módulo `project`: escreve o esqueleto IntelliJ em `.jdt/<pkg>/idea` (Remote Debug `127.0.0.1:PORT`, content root = decode já existente). `jdt attach --studio` chama isto depois do forward. Sem decode, imprime skip e o attach segue.
 8. `jdt targets --http`: grep/parse raso de OkHttp / Retrofit / `HttpURLConnection` no decode; imprime `classe#metodo`.
-9. Log em texto: cada passo, skip, e o one-liner de attach.
+9. Log em texto via `internal/logging`: cada passo é `HH:MM:SS [ok|skip] [módulo] ação` (cor no TTY), escrito quando a etapa termina e antes da próxima chamada bloqueante. O one-liner de attach é `[ok] [attach] 127.0.0.1:PORT`.
 10. `jdt apps`: packages instalados (PID se o processo existe). `jdt pull` aceita o IDX dessa lista, além de package ou APK local. O nome é o label não-localizado; label de resource fica pro package.
 
 Não inclui no MVP:

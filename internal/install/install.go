@@ -10,6 +10,7 @@ import (
 
 	"github.com/c1r5/jdwp-wire/internal/apk"
 	"github.com/c1r5/jdwp-wire/internal/device"
+	"github.com/c1r5/jdwp-wire/internal/logging"
 	"github.com/c1r5/jdwp-wire/internal/workspace"
 )
 
@@ -18,13 +19,17 @@ type Deps struct {
 	Device device.Client
 	APK    apk.Client
 	CWD    string
+	// Log is written as each step finishes. Nil stays quiet.
+	Log *logging.Logger
 }
 
 // Request is the parsed input for jdt install.
+// SignOnly builds and signs and does not call adb install.
 type Request struct {
-	Target  string
-	Serial  string
-	Package string
+	Target   string
+	Serial   string
+	Package  string
+	SignOnly bool
 }
 
 // Result is a signed APK set installed on a device.
@@ -61,9 +66,15 @@ func Run(ctx context.Context, deps Deps, req Request) (Result, error) {
 		if signed.APK != "" {
 			apks[i] = signed.APK
 		}
+		deps.Log.OK("sign", apks[i])
 	}
-	if err := deps.APK.Install(ctx, dev.Serial, apks...); err != nil {
-		return Result{}, err
+	if !req.SignOnly {
+		if err := deps.APK.Install(ctx, dev.Serial, apks...); err != nil {
+			return Result{}, err
+		}
+		for _, p := range apks {
+			deps.Log.OK("install", p)
+		}
 	}
 	out := Result{APK: apks[0], Serial: dev.Serial, Encoded: p.Encoded}
 	if len(apks) > 1 {
@@ -177,6 +188,7 @@ func buildPatched(ctx context.Context, deps Deps, decodedDir, pkg string) (strin
 	if art.APK != "" {
 		out = art.APK
 	}
+	deps.Log.OK("encode", out)
 	return out, true, nil
 }
 

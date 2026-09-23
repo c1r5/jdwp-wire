@@ -48,6 +48,34 @@ func TestRunSignsAPK(t *testing.T) {
 	}
 }
 
+func TestRunSignOnlySkipsInstall(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	src := filepath.Join(dir, "app.apk")
+	if err := os.WriteFile(src, []byte("apk"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	res, err := Run(context.Background(), Deps{
+		Device: testDevice(),
+		APK: &apk.Fake{
+			SignFn: func(_ context.Context, apkPath, _ string) (apk.Artifact, error) {
+				return apk.Artifact{APK: apkPath + ".signed"}, nil
+			},
+			InstallFn: func(context.Context, string, ...string) error {
+				t.Fatal("install called")
+				return nil
+			},
+		},
+		CWD: dir,
+	}, Request{Target: src, SignOnly: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.APK != src+".signed" || res.Serial != "emulator-5554" {
+		t.Fatalf("%+v", res)
+	}
+}
+
 func TestRunDecodeDirNeedsPackage(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()

@@ -3,6 +3,9 @@ package apk
 import (
 	"context"
 	"fmt"
+	"strings"
+
+	"github.com/c1r5/jdwp-wire/internal/execx"
 )
 
 func (t *Tools) Install(ctx context.Context, serial string, apks ...string) error {
@@ -24,6 +27,20 @@ func (t *Tools) Install(ctx context.Context, serial string, apks ...string) erro
 	res, err := t.r.Run(ctx, "adb", args...)
 	if err != nil {
 		return wrapRun("install", "adb", res.Stderr, err)
+	}
+	if strings.Contains(res.Stdout+res.Stderr, "INSTALL_FAILED") {
+		return fmt.Errorf("apk: install: %w", &execx.ExitError{Name: "adb", ExitCode: 1, Stderr: res.Stdout + res.Stderr})
+	}
+	return nil
+}
+
+func (t *Tools) Uninstall(ctx context.Context, serial, pkg string) error {
+	if serial == "" || pkg == "" {
+		return fmt.Errorf("apk: uninstall: %w", ErrUsage)
+	}
+	res, err := t.r.Run(ctx, "adb", "-s", serial, "uninstall", pkg)
+	if err != nil {
+		return wrapRun("uninstall", "adb", res.Stderr, err)
 	}
 	return nil
 }

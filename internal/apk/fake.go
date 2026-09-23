@@ -8,12 +8,13 @@ import (
 )
 
 type Fake struct {
-	PullFn    func(ctx context.Context, serial, pkg string, layout workspace.Layout) (Artifact, error)
-	CopyFn    func(ctx context.Context, src, pkg string, layout workspace.Layout) (Artifact, error)
-	DecodeFn  func(ctx context.Context, apkPath string, layout workspace.Layout) (Decoded, error)
-	BuildFn   func(ctx context.Context, decodedDir, outAPK string) (Artifact, error)
-	SignFn    func(ctx context.Context, apkPath, keystore string) (Artifact, error)
-	InstallFn func(ctx context.Context, serial string, apks ...string) error
+	PullFn      func(ctx context.Context, serial, pkg string, layout workspace.Layout) (Artifact, error)
+	CopyFn      func(ctx context.Context, src, pkg string, layout workspace.Layout) (Artifact, error)
+	DecodeFn    func(ctx context.Context, apkPath string, layout workspace.Layout) (Decoded, error)
+	BuildFn     func(ctx context.Context, decodedDir, outAPK string) (Artifact, error)
+	SignFn      func(ctx context.Context, apkPath, keystore string) (Artifact, error)
+	InstallFn   func(ctx context.Context, serial string, apks ...string) error
+	UninstallFn func(ctx context.Context, serial, pkg string) error
 }
 
 func fakeErr() error {
@@ -60,4 +61,11 @@ func (f *Fake) Install(ctx context.Context, serial string, apks ...string) error
 		return fakeErr()
 	}
 	return f.InstallFn(ctx, serial, apks...)
+}
+
+func (f *Fake) Uninstall(ctx context.Context, serial, pkg string) error {
+	if f == nil || f.UninstallFn == nil {
+		return fakeErr()
+	}
+	return f.UninstallFn(ctx, serial, pkg)
 }

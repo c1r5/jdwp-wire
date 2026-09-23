@@ -38,10 +38,10 @@ func TestPatchHuman(t *testing.T) {
 		t.Fatalf("exit %d stderr=%q", code, stderr.String())
 	}
 	out := stdout.String()
-	if !strings.Contains(out, "[ok] patch: debuggable") {
+	if !strings.Contains(out, "[ok] [patch] debuggable") {
 		t.Fatalf("stdout=%q", out)
 	}
-	if !strings.Contains(out, "[skip] patch: nsc already trusts user CA") {
+	if !strings.Contains(out, "[skip] [patch] nsc already trusts user CA") {
 		t.Fatalf("stdout=%q", out)
 	}
 }

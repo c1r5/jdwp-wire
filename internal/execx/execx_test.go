@@ -3,7 +3,9 @@ package execx
 import (
 	"context"
 	"errors"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -71,6 +73,26 @@ func TestRun_Stdout(t *testing.T) {
 	}
 	if res.Stderr != "" {
 		t.Fatalf("stderr = %q, want empty", res.Stderr)
+	}
+}
+
+func TestRun_OrphanPipeKeepsSuccessfulOutput(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	script := filepath.Join(dir, "orphan.sh")
+	body := "#!/bin/sh\necho 'Usage: android run --debug --apks=PARAM'\nsleep 5 &\nexit 0\n"
+	if err := os.WriteFile(script, []byte(body), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	res, err := Exec{}.Run(withTimeout(t), script)
+	if err != nil {
+		t.Fatalf("err = %v\nstdout=%q stderr=%q", err, res.Stdout, res.Stderr)
+	}
+	if !strings.Contains(res.Stdout, "--apks") || !strings.Contains(res.Stdout, "--debug") {
+		t.Fatalf("stdout = %q", res.Stdout)
+	}
+	if res.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d", res.ExitCode)
 	}
 }
 

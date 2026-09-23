@@ -3,21 +3,36 @@ package attach
 import (
 	"context"
 	"errors"
+	"fmt"
+	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/c1r5/jdwp-wire/internal/androidcli"
+	"github.com/c1r5/jdwp-wire/internal/apk"
 	"github.com/c1r5/jdwp-wire/internal/device"
 	"github.com/c1r5/jdwp-wire/internal/jdwp"
+	"github.com/c1r5/jdwp-wire/internal/patch"
 	"github.com/c1r5/jdwp-wire/internal/project"
 	"github.com/c1r5/jdwp-wire/internal/workspace"
 )
 
 func testDevice() device.Client {
-	return &device.Fake{Devices: []device.Device{{
-		Serial: "emulator-5554",
-		State:  device.StateDevice,
-		Kind:   device.KindEmulator,
-	}}}
+	return &device.Fake{
+		Devices: []device.Device{{
+			Serial: "emulator-5554",
+			State:  device.StateDevice,
+			Kind:   device.KindEmulator,
+		}},
+		DebugPackages: map[string]bool{"com.alvo": true},
+	}
+}
+
+func adbTools(t *testing.T) *apk.Fake {
+	t.Helper()
+	tools := repackAPK(t)
+	tools.InstallFn = func(context.Context, string, ...string) error { return nil }
+	return tools
 }
 
 func TestRun(t *testing.T) {
@@ -28,6 +43,9 @@ func TestRun(t *testing.T) {
 	}}, Options{
 		Package: "com.alvo",
 		Port:    8700,
+		CWD:     t.TempDir(),
+		APK:     adbTools(t),
+		Patch:   appliedPatch(),
 		Writer: &project.Fake{WriteFn: func(project.Config) (project.Result, error) {
 			called = true
 			return project.Result{}, nil
@@ -61,6 +79,8 @@ func TestRunStudioWrites(t *testing.T) {
 		Package: "com.alvo",
 		Port:    9000,
 		CWD:     cwd,
+		APK:     adbTools(t),
+		Patch:   appliedPatch(),
 		Studio:  true,
 		Writer: &project.Fake{WriteFn: func(cfg project.Config) (project.Result, error) {
 			got = cfg
@@ -86,6 +106,8 @@ func TestRunStudioNoDecode(t *testing.T) {
 		Package: "com.alvo",
 		Port:    8700,
 		CWD:     t.TempDir(),
+		APK:     adbTools(t),
+		Patch:   appliedPatch(),
 		Studio:  true,
 		Writer: &project.Fake{WriteFn: func(project.Config) (project.Result, error) {
 			return project.Result{}, project.ErrNoDecode
@@ -107,6 +129,8 @@ func TestRunStudioWriteError(t *testing.T) {
 		Package: "com.alvo",
 		Port:    8700,
 		CWD:     t.TempDir(),
+		APK:     adbTools(t),
+		Patch:   appliedPatch(),
 		Studio:  true,
 		Writer: &project.Fake{WriteFn: func(project.Config) (project.Result, error) {
 			return project.Result{}, errors.New("disk")
@@ -131,5 +155,291 @@ func TestRunStudioBadPackage(t *testing.T) {
 	})
 	if !errors.Is(err, jdwp.ErrUsage) {
 		t.Fatalf("err=%v", err)
+	}
+}
+
+func releaseDevice() *device.Fake {
+	return &device.Fake{Devices: []device.Device{{
+		Serial: "emulator-5554",
+		State:  device.StateDevice,
+		Kind:   device.KindEmulator,
+	}}}
+}
+
+func repackAPK(t *testing.T) *apk.Fake {
+	t.Helper()
+	return &apk.Fake{
+		PullFn: func(_ context.Context, _, pkg string, _ workspace.Layout) (apk.Artifact, error) {
+			return apk.Artifact{Package: pkg, APK: "/tmp/" + pkg + "/base.apk"}, nil
+		},
+		DecodeFn: func(_ context.Context, _ string, layout workspace.Layout) (apk.Decoded, error) {
+			if err := os.MkdirAll(layout.Decode, 0o755); err != nil {
+				return apk.Decoded{}, err
+			}
+			if err := os.WriteFile(filepath.Join(layout.Decode, "AndroidManifest.xml"), []byte("<manifest/>"), 0o644); err != nil {
+				return apk.Decoded{}, err
+			}
+			if err := os.WriteFile(filepath.Join(layout.Decode, "apktool.yml"), []byte("version: 2\n"), 0o644); err != nil {
+				return apk.Decoded{}, err
+			}
+			return apk.Decoded{Package: "com.alvo", Dir: layout.Decode}, nil
+		},
+		BuildFn: func(_ context.Context, _, out string) (apk.Artifact, error) {
+			return apk.Artifact{APK: out}, nil
+		},
+		SignFn: func(_ context.Context, path, _ string) (apk.Artifact, error) {
+			return apk.Artifact{APK: path + ".signed"}, nil
+		},
+		InstallFn: func(context.Context, string, ...string) error {
+			t.Fatal("adb install")
+			return nil
+		},
+	}
+}
+
+func appliedPatch() *patch.Fake {
+	return &patch.Fake{ApplyFn: func(dir string) (patch.Result, error) {
+		return patch.Result{Dir: dir, Debuggable: patch.ActionApplied, NSC: patch.ActionApplied}, nil
+	}}
+}
+
+func TestRunRepackageAndroid(t *testing.T) {
+	t.Parallel()
+	var launched []string
+	var bound bool
+	tools := repackAPK(t)
+	res, err := Run(context.Background(), releaseDevice(), &jdwp.Fake{
+		AttachFn: func(context.Context, string, string, int) (jdwp.Session, error) {
+			t.Fatal("adb attach")
+			return jdwp.Session{}, nil
+		},
+		BindFn: func(_ context.Context, serial, pkg string, port int) (jdwp.Session, error) {
+			bound = true
+			return jdwp.Session{Package: pkg, Serial: serial, PID: 9, Port: port}, nil
+		},
+	}, Options{
+		Package: "com.alvo",
+		Port:    8700,
+		CWD:     t.TempDir(),
+		APK:     tools,
+		Patch:   appliedPatch(),
+		Android: &androidcli.Fake{
+			AvailableFn: func(context.Context) (bool, error) { return true, nil },
+			RunDebugFn: func(_ context.Context, serial string, apks []string) error {
+				if serial != "emulator-5554" || len(apks) != 1 {
+					t.Fatalf("run %s %v", serial, apks)
+				}
+				launched = apks
+				return nil
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bound || !res.Repackaged || res.Launch != LaunchAndroid || res.Installed || res.Session.PID != 9 {
+		t.Fatalf("%+v bound=%v", res, bound)
+	}
+	if len(launched) != 1 || launched[0] != res.Signed {
+		t.Fatalf("launched %v signed %s", launched, res.Signed)
+	}
+	if res.Patch.Debuggable != patch.ActionApplied || res.DecodeDir == "" || res.PullAPK == "" {
+		t.Fatalf("%+v", res)
+	}
+}
+
+func TestRunRepackageUninstallsOnSignatureMismatch(t *testing.T) {
+	t.Parallel()
+	var runs int
+	var uninstalled bool
+	tools := repackAPK(t)
+	res, err := Run(context.Background(), releaseDevice(), &jdwp.Fake{
+		BindFn: func(_ context.Context, serial, pkg string, port int) (jdwp.Session, error) {
+			return jdwp.Session{Package: pkg, Serial: serial, PID: 3, Port: port}, nil
+		},
+	}, Options{
+		Package: "com.alvo",
+		Port:    8700,
+		CWD:     t.TempDir(),
+		APK: &apk.Fake{
+			PullFn:    tools.PullFn,
+			DecodeFn:  tools.DecodeFn,
+			BuildFn:   tools.BuildFn,
+			SignFn:    tools.SignFn,
+			InstallFn: tools.InstallFn,
+			UninstallFn: func(_ context.Context, serial, pkg string) error {
+				if serial != "emulator-5554" || pkg != "com.alvo" {
+					t.Fatalf("uninstall %s %s", serial, pkg)
+				}
+				uninstalled = true
+				return nil
+			},
+		},
+		Patch: appliedPatch(),
+		Android: &androidcli.Fake{
+			AvailableFn: func(context.Context) (bool, error) { return true, nil },
+			RunDebugFn: func(context.Context, string, []string) error {
+				runs++
+				if runs == 1 {
+					return errors.New("androidcli: run: INSTALL_FAILED_UPDATE_INCOMPATIBLE")
+				}
+				return nil
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !uninstalled || runs != 2 || res.Launch != LaunchAndroid || res.Session.PID != 3 {
+		t.Fatalf("runs=%d uninstalled=%v res=%+v", runs, uninstalled, res)
+	}
+}
+
+func TestRunRepackageFallsBackToADB(t *testing.T) {
+	t.Parallel()
+	var installed []string
+	var attached bool
+	tools := repackAPK(t)
+	tools.InstallFn = func(_ context.Context, serial string, apks ...string) error {
+		if serial != "emulator-5554" {
+			t.Fatalf("serial %s", serial)
+		}
+		installed = apks
+		return nil
+	}
+	res, err := Run(context.Background(), releaseDevice(), &jdwp.Fake{
+		AttachFn: func(_ context.Context, serial, pkg string, port int) (jdwp.Session, error) {
+			attached = true
+			return jdwp.Session{Package: pkg, Serial: serial, PID: 4, Port: port, Activity: "com.alvo/.Main"}, nil
+		},
+		BindFn: func(context.Context, string, string, int) (jdwp.Session, error) {
+			t.Fatal("bind")
+			return jdwp.Session{}, nil
+		},
+	}, Options{
+		Package: "com.alvo",
+		Port:    8700,
+		CWD:     t.TempDir(),
+		APK:     tools,
+		Patch:   appliedPatch(),
+		Android: &androidcli.Fake{AvailableFn: func(context.Context) (bool, error) { return false, nil }},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !attached || !res.Repackaged || res.Launch != LaunchADB || !res.Installed || len(installed) != 1 {
+		t.Fatalf("%+v installed %v", res, installed)
+	}
+}
+
+func TestRunMissingPackage(t *testing.T) {
+	t.Parallel()
+	tools := adbTools(t)
+	tools.PullFn = func(context.Context, string, string, workspace.Layout) (apk.Artifact, error) {
+		return apk.Artifact{}, fmt.Errorf("apk: pull: %w", apk.ErrPackageNotFound)
+	}
+	_, err := Run(context.Background(), releaseDevice(), &jdwp.Fake{
+		AttachFn: func(context.Context, string, string, int) (jdwp.Session, error) {
+			t.Fatal("attach")
+			return jdwp.Session{}, nil
+		},
+	}, Options{Package: "com.alvo", Port: 8700, CWD: t.TempDir(), APK: tools, Patch: appliedPatch()})
+	if !errors.Is(err, apk.ErrPackageNotFound) {
+		t.Fatalf("err=%v", err)
+	}
+}
+
+type dropDev struct {
+	*device.Fake
+	n     int
+	limit int
+}
+
+func (d *dropDev) Resolve(ctx context.Context, serial string) (device.Device, error) {
+	d.n++
+	if d.n > d.limit {
+		return device.Device{}, fmt.Errorf("device: resolve: %w", device.ErrNoDevice)
+	}
+	return d.Fake.Resolve(ctx, serial)
+}
+
+func TestRunNoForwardWhenDeviceLeaves(t *testing.T) {
+	t.Parallel()
+	base := &device.Fake{Devices: []device.Device{{
+		Serial: "emulator-5554",
+		State:  device.StateDevice,
+		Kind:   device.KindUSB,
+		Model:  "phone",
+	}}}
+	_, err := Run(context.Background(), &dropDev{Fake: base, limit: 3}, &jdwp.Fake{
+		AttachFn: func(context.Context, string, string, int) (jdwp.Session, error) {
+			t.Fatal("forwarded after the device left")
+			return jdwp.Session{}, nil
+		},
+		BindFn: func(context.Context, string, string, int) (jdwp.Session, error) {
+			t.Fatal("forwarded after the device left")
+			return jdwp.Session{}, nil
+		},
+	}, Options{
+		Package: "com.alvo",
+		Port:    8700,
+		CWD:     t.TempDir(),
+		APK:     adbTools(t),
+		Patch:   appliedPatch(),
+	})
+	if !errors.Is(err, device.ErrNoDevice) {
+		t.Fatalf("err=%v", err)
+	}
+}
+
+func TestRunExistingDecodeSkipsPullAndStillInstalls(t *testing.T) {
+	t.Parallel()
+	cwd := t.TempDir()
+	layout, err := workspace.ForPackage(cwd, "com.alvo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(layout.Decode, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(layout.Decode, "AndroidManifest.xml"), []byte("<manifest/>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(layout.Decode, "apktool.yml"), []byte("version: 2\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tools := adbTools(t)
+	tools.PullFn = func(context.Context, string, string, workspace.Layout) (apk.Artifact, error) {
+		t.Fatal("pull")
+		return apk.Artifact{}, nil
+	}
+	var installed bool
+	tools.InstallFn = func(context.Context, string, ...string) error {
+		installed = true
+		return nil
+	}
+	res, err := Run(context.Background(), testDevice(), &jdwp.Fake{
+		AttachFn: func(_ context.Context, serial, pkg string, port int) (jdwp.Session, error) {
+			return jdwp.Session{Package: pkg, Serial: serial, PID: 5, Port: port}, nil
+		},
+	}, Options{
+		Package: "com.alvo",
+		Port:    8700,
+		CWD:     cwd,
+		APK:     tools,
+		Patch: &patch.Fake{ApplyFn: func(dir string) (patch.Result, error) {
+			return patch.Result{Dir: dir, Debuggable: patch.ActionSkipped, NSC: patch.ActionSkipped}, nil
+		}},
+		Android: &androidcli.Fake{},
+		Studio:  true,
+		Writer: &project.Fake{WriteFn: func(cfg project.Config) (project.Result, error) {
+			return project.Result{Dir: cfg.Layout.Idea}, nil
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.SkipDecode || !installed || res.Studio != StudioWritten || res.Patch.Debuggable != patch.ActionSkipped {
+		t.Fatalf("%+v installed=%v", res, installed)
 	}
 }

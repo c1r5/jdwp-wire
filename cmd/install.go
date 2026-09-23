@@ -30,10 +30,15 @@ func newInstallCmd(cfg runConfig) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			lg := cfg.logger
+			if asJSON {
+				lg = nil
+			}
 			res, err := install.Run(ctx, install.Deps{
 				Device: cfg.device,
 				APK:    cfg.apk,
 				CWD:    cfg.cwd,
+				Log:    lg,
 			}, install.Request{
 				Target:  args[0],
 				Serial:  serial,
@@ -42,38 +47,15 @@ func newInstallCmd(cfg runConfig) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			apks := append([]string{res.APK}, res.Splits...)
 			if asJSON {
 				return writeInstallJSON(c.OutOrStdout(), res.APK, res.Splits, res.Serial)
 			}
-			return writeInstallHuman(c.OutOrStdout(), apks, res.Encoded)
+			return nil
 		},
 	}
 	c.Flags().StringP("serial", "s", "", "adb serial (required if multiple devices)")
 	c.Flags().String("package", "", "package name (required when installing a decode dir outside .jdt/<pkg>/decode)")
 	return c
-}
-
-func writeInstallHuman(w io.Writer, apks []string, encoded bool) error {
-	if len(apks) == 0 {
-		return nil
-	}
-	if encoded {
-		if _, err := fmt.Fprintf(w, "[ok] encode: %s\n", apks[0]); err != nil {
-			return err
-		}
-	}
-	for _, p := range apks {
-		if _, err := fmt.Fprintf(w, "[ok] sign: %s\n", p); err != nil {
-			return err
-		}
-	}
-	for _, p := range apks {
-		if _, err := fmt.Fprintf(w, "[ok] install: %s\n", p); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 type installJSON struct {

@@ -7,6 +7,7 @@ import (
 
 type Fake struct {
 	AttachFn func(ctx context.Context, serial, pkg string, port int) (Session, error)
+	BindFn   func(ctx context.Context, serial, pkg string, port int) (Session, error)
 	ResetFn  func(ctx context.Context, serial, pkg string, port int) error
 }
 
@@ -19,6 +20,13 @@ func (f *Fake) Attach(ctx context.Context, serial, pkg string, port int) (Sessio
 		return Session{}, fakeErr()
 	}
 	return f.AttachFn(ctx, serial, pkg, port)
+}
+
+func (f *Fake) Bind(ctx context.Context, serial, pkg string, port int) (Session, error) {
+	if f == nil || f.BindFn == nil {
+		return Session{}, fakeErr()
+	}
+	return f.BindFn(ctx, serial, pkg, port)
 }
 
 func (f *Fake) Reset(ctx context.Context, serial, pkg string, port int) error {
