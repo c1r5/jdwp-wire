@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
 	"strconv"
+	"strings"
 
 	"github.com/c1r5/jdwp-wire/internal/execx"
 )
@@ -35,7 +35,7 @@ func (a *ADB) Attach(ctx context.Context, serial, pkg string, port int) (Session
 	if err := a.forward(ctx, serial, port, pid); err != nil {
 		return Session{}, err
 	}
-	if err := a.probe(ctx, port); err != nil {
+	if err := a.confirmForward(ctx, serial, port, pid); err != nil {
 		return Session{}, err
 	}
 	return Session{Package: pkg, Serial: serial, PID: pid, Port: port, Activity: act}, nil
@@ -52,7 +52,7 @@ func (a *ADB) Bind(ctx context.Context, serial, pkg string, port int) (Session, 
 	if err := a.forward(ctx, serial, port, pid); err != nil {
 		return Session{}, err
 	}
-	if err := a.probe(ctx, port); err != nil {
+	if err := a.confirmForward(ctx, serial, port, pid); err != nil {
 		return Session{}, err
 	}
 	return Session{Package: pkg, Serial: serial, PID: pid, Port: port}, nil
@@ -85,15 +85,16 @@ func (a *ADB) forward(ctx context.Context, serial string, port, pid int) error {
 	return nil
 }
 
-func (a *ADB) probe(ctx context.Context, port int) error {
-	addr := net.JoinHostPort("127.0.0.1", strconv.Itoa(port))
-	var d net.Dialer
-	conn, err := d.DialContext(ctx, "tcp", addr)
+func (a *ADB) confirmForward(ctx context.Context, serial string, port, pid int) error {
+	res, err := a.r.Run(ctx, "adb", "-s", serial, "forward", "--list")
 	if err != nil {
-		return fmt.Errorf("jdwp: probe: %w", ErrProbe)
+		return wrapRun("forward", "adb", res.Stderr, err)
 	}
-	if err := conn.Close(); err != nil {
-		return fmt.Errorf("jdwp: probe: %w", ErrProbe)
+	want := fmt.Sprintf("%s tcp:%d jdwp:%d", serial, port, pid)
+	for _, line := range strings.Split(res.Stdout, "\n") {
+		if strings.TrimSpace(line) == want {
+			return nil
+		}
 	}
-	return nil
+	return fmt.Errorf("jdwp: forward: %w", ErrProbe)
 }

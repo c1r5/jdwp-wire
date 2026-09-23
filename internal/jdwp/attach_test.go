@@ -52,6 +52,11 @@ func closedPort(t *testing.T) int {
 
 func attachRunner(t *testing.T, cmds *[][]string) execx.Runner {
 	t.Helper()
+	return commandRunner(t, cmds, true)
+}
+
+func commandRunner(t *testing.T, cmds *[][]string, list bool) execx.Runner {
+	t.Helper()
 	return &execx.Fake{RunFn: func(_ context.Context, name string, args ...string) (execx.Result, error) {
 		*cmds = append(*cmds, append([]string{name}, args...))
 		joined := strings.Join(args, " ")
@@ -60,10 +65,30 @@ func attachRunner(t *testing.T, cmds *[][]string) execx.Runner {
 			return execx.Result{Stdout: "com.alvo/.MainActivity\n"}, nil
 		case len(args) >= 3 && args[2] == "jdwp":
 			return execx.Result{Stdout: "4242\n"}, nil
+		case strings.Contains(joined, "--list") && list:
+			return execx.Result{Stdout: forwardList(*cmds)}, nil
 		default:
 			return execx.Result{}, nil
 		}
 	}}
+}
+
+func forwardList(cmds [][]string) string {
+	for i := len(cmds) - 1; i >= 0; i-- {
+		args := cmds[i]
+		serial := ""
+		for k := 0; k < len(args)-1; k++ {
+			if args[k] == "-s" {
+				serial = args[k+1]
+			}
+		}
+		for j := 0; j < len(args)-2; j++ {
+			if args[j] == "forward" && strings.HasPrefix(args[j+1], "tcp:") && strings.HasPrefix(args[j+2], "jdwp:") {
+				return serial + " " + args[j+1] + " " + args[j+2] + "\n"
+			}
+		}
+	}
+	return ""
 }
 
 func TestBindSkipsLaunch(t *testing.T) {
@@ -93,6 +118,10 @@ func TestBindReadsStreamingJDWP(t *testing.T) {
 	t.Parallel()
 	port := listenLocal(t)
 	a := New(&execx.Fake{RunFn: func(ctx context.Context, _ string, args ...string) (execx.Result, error) {
+		joined := strings.Join(args, " ")
+		if strings.Contains(joined, "--list") {
+			return execx.Result{Stdout: "emu tcp:" + strconv.Itoa(port) + " jdwp:4242\n"}, nil
+		}
 		if len(args) >= 3 && args[2] == "jdwp" {
 			<-ctx.Done()
 			return execx.Result{Stdout: "4242\n"}, ctx.Err()
@@ -171,7 +200,7 @@ func TestAttachUsage(t *testing.T) {
 func TestAttachProbeFails(t *testing.T) {
 	t.Parallel()
 	var cmds [][]string
-	a := New(attachRunner(t, &cmds), &device.Fake{Procs: map[string][]device.Process{
+	a := New(commandRunner(t, &cmds, false), &device.Fake{Procs: map[string][]device.Process{
 		"com.alvo": {{PID: 4242, Package: "com.alvo"}},
 	}})
 	a.poll = 0

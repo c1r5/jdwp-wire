@@ -140,7 +140,7 @@ func writeAttachHuman(w io.Writer, res attach.Result) error {
 	if _, err := fmt.Fprintf(w, "[ok] forward: adb -s %s tcp:%d -> jdwp:%d\n", sess.Serial, sess.Port, sess.PID); err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintf(w, "[ok] probe: 127.0.0.1:%d\n", sess.Port); err != nil {
+	if _, err := fmt.Fprintln(w, "[skip] probe: jdwp socket left for the debugger"); err != nil {
 		return err
 	}
 	var studio string
@@ -155,7 +155,7 @@ func writeAttachHuman(w io.Writer, res attach.Result) error {
 	if _, err := fmt.Fprintln(w, studio); err != nil {
 		return err
 	}
-	_, err := fmt.Fprintf(w, "attach: localhost:%d\n", sess.Port)
+	_, err := fmt.Fprintf(w, "attach: 127.0.0.1:%d\n", sess.Port)
 	return err
 }
 

@@ -107,9 +107,9 @@ func TestAttachHuman(t *testing.T) {
 		"[ok] jdwp: pid 4242",
 		"[ok] device: emulator emulator-5554 phone",
 		"[ok] forward: adb -s emulator-5554 tcp:8700 -> jdwp:4242",
-		"[ok] probe: 127.0.0.1:8700",
+		"[skip] probe: jdwp socket left for the debugger",
 		"[skip] studio: pass --studio",
-		"attach: localhost:8700",
+		"attach: 127.0.0.1:8700",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("stdout missing %q:\n%s", want, out)
@@ -171,7 +171,7 @@ func TestAttachRepackageAndroid(t *testing.T) {
 		"[ok] patch: nsc user CA",
 		"[ok] launch: android run --debug",
 		"[ok] jdwp: pid 8",
-		"attach: localhost:8700",
+		"attach: 127.0.0.1:8700",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q\n%s", want, out)
