@@ -37,15 +37,20 @@ func (f *Fake) Resolve(ctx context.Context, serial string) (Device, error) {
 	return d, nil
 }
 
-func (f *Fake) ListApps(_ context.Context, serial string) ([]App, error) {
+func (f *Fake) ListApps(_ context.Context, serial string, includeSystem bool) ([]App, error) {
 	if serial == "" {
 		return nil, fmt.Errorf("device: apps: %w", ErrUsage)
 	}
 	if f.AppsErr != nil {
 		return nil, fmt.Errorf("device: apps: %w", f.AppsErr)
 	}
-	out := make([]App, len(f.Apps))
-	copy(out, f.Apps)
+	out := make([]App, 0, len(f.Apps))
+	for _, app := range f.Apps {
+		if app.System && !includeSystem {
+			continue
+		}
+		out = append(out, app)
+	}
 	return out, nil
 }
 

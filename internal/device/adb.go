@@ -66,11 +66,15 @@ func (a *ADB) Debuggable(ctx context.Context, serial, pkg string) (bool, error) 
 	return ok, nil
 }
 
-func (a *ADB) ListApps(ctx context.Context, serial string) ([]App, error) {
+func (a *ADB) ListApps(ctx context.Context, serial string, includeSystem bool) ([]App, error) {
 	if serial == "" {
 		return nil, fmt.Errorf("device: apps: %w", ErrUsage)
 	}
-	res, err := a.r.Run(ctx, "adb", "-s", serial, "shell", "pm", "list", "packages")
+	args := []string{"-s", serial, "shell", "pm", "list", "packages"}
+	if !includeSystem {
+		args = append(args, "-3")
+	}
+	res, err := a.r.Run(ctx, "adb", args...)
 	if err != nil {
 		return nil, wrapADB("apps", err)
 	}

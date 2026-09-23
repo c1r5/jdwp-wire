@@ -63,8 +63,8 @@ Binário: `jdt`
 
 ```
 jdt devices
-jdt apps
-jdt pull     <index|pkg|apk> [--decode]
+jdt apps     [--system]
+jdt pull     <index|pkg|apk> [--decode] [--system]
 jdt patch    <decoded_dir|--apk>
 jdt install  <apk|decoded_dir|pkg>
 jdt attach   <pkg> [--port 8700] [--studio] [--no-patch]
@@ -88,7 +88,7 @@ O pipeline do attach começa no decode e termina no install, e em seguida faz `a
 | Módulo    | Papel                                      | MVP | v1 |
 |-----------|--------------------------------------------|-----|----|
 | `device`  | serial, root/userdebug, `pidof` estável, packages instalados | sim | multi-device explícito |
-| `apps`    | `jdt apps`: IDX/PID/nome/package; índice do `pull` | sim | label de `@string` |
+| `apps`    | `jdt apps`: IDX/PID/nome/package de apps do usuário; `--system` inclui sistema; em execução primeiro; índice do `pull` | sim | label de `@string` |
 | `apk`     | pull, splits, apktool, sign                | pull + decode + sign + install-multiple (sem merge) | AAB |
 | `patch`   | `debuggable=true`, NSC user CA             | sim | extractNativeLibs, keep signature se possível |
 | `jdwp`    | set-debug-app, wait, forward, healthcheck  | sim | retry / process spawn vs attach |
@@ -156,7 +156,7 @@ Inclui:
 7. Módulo `project`: escreve o esqueleto IntelliJ em `.jdt/<pkg>/idea` (Remote Debug `127.0.0.1:PORT`, content root = decode já existente). `jdt attach --studio` chama isto depois do forward. Sem decode, imprime skip e o attach segue.
 8. `jdt targets --http`: grep/parse raso de OkHttp / Retrofit / `HttpURLConnection` no decode; imprime `classe#metodo`.
 9. Log em texto via `internal/logging`: cada passo é `HH:MM:SS [ok|skip] [módulo] ação` (cor no TTY), escrito quando a etapa termina e antes da próxima chamada bloqueante. O one-liner de attach é `[ok] [attach] 127.0.0.1:PORT`.
-10. `jdt apps`: packages instalados (PID se o processo existe). `jdt pull` aceita o IDX dessa lista, além de package ou APK local. O nome é o label não-localizado; label de resource fica pro package.
+10. `jdt apps`: pacotes de terceiro (`pm list packages -3`), com PID se o processo existe. `--system` inclui pacotes de sistema. Em execução vêm primeiro; no grupo, nome e depois package. `jdt pull` aceita o IDX dessa lista (e `jdt pull --system` o IDX da lista com sistema), além de package ou APK local. O nome é o label não-localizado; label de resource fica pro package.
 
 Não inclui no MVP:
 

@@ -28,6 +28,8 @@ type Request struct {
 	Serial  string
 	Package string
 	Decode  bool
+	// System selects the jdt apps --system index space.
+	System bool
 }
 
 // Result is a pulled (and optionally decoded) artifact.
@@ -84,7 +86,7 @@ func fetch(ctx context.Context, deps Deps, req Request) (apk.Artifact, error) {
 	}
 	pkg := req.Target
 	if isAppIndex(pkg) {
-		pkg, err = packageByIndex(ctx, deps, dev.Serial, pkg)
+		pkg, err = packageByIndex(ctx, deps, dev.Serial, pkg, req.System)
 		if err != nil {
 			return apk.Artifact{}, err
 		}
@@ -96,12 +98,12 @@ func fetch(ctx context.Context, deps Deps, req Request) (apk.Artifact, error) {
 	return deps.APK.Pull(ctx, dev.Serial, pkg, layout)
 }
 
-func packageByIndex(ctx context.Context, deps Deps, serial, raw string) (string, error) {
+func packageByIndex(ctx context.Context, deps Deps, serial, raw string, includeSystem bool) (string, error) {
 	n, err := strconv.Atoi(raw)
 	if err != nil {
 		return "", fmt.Errorf("%w: app index %s", device.ErrUsage, raw)
 	}
-	entries, err := apps.List(ctx, deps.Device, serial)
+	entries, err := apps.List(ctx, deps.Device, serial, includeSystem)
 	if err != nil {
 		return "", err
 	}

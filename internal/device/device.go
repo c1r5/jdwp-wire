@@ -48,10 +48,13 @@ type Process struct {
 
 // App is an installed package. Label is empty when the device did not
 // print a non-localized name. PID is 0 when nothing is running.
+// System is a system package. ListApps omits these unless includeSystem is set.
+// The adb client applies that cut with `pm list packages -3` and leaves System false.
 type App struct {
 	Package string
 	Label   string
 	PID     int
+	System  bool
 }
 
 // Client lists devices and processes. Temporary: move to the consumer
@@ -61,6 +64,8 @@ type Client interface {
 	List(ctx context.Context) ([]Device, error)
 	Resolve(ctx context.Context, serial string) (Device, error)
 	Pidof(ctx context.Context, serial, pkg string) ([]Process, error)
-	ListApps(ctx context.Context, serial string) ([]App, error)
+	// ListApps returns installed packages. includeSystem adds system packages;
+	// otherwise the result is third-party packages only.
+	ListApps(ctx context.Context, serial string, includeSystem bool) ([]App, error)
 	Debuggable(ctx context.Context, serial, pkg string) (bool, error)
 }
