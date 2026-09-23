@@ -15,12 +15,15 @@ import (
 )
 
 func testDevice() *device.Fake {
-	return &device.Fake{Devices: []device.Device{{
-		Serial: "emulator-5554",
-		State:  device.StateDevice,
-		Kind:   device.KindEmulator,
-		Model:  "phone",
-	}}}
+	return &device.Fake{
+		Devices: []device.Device{{
+			Serial: "emulator-5554",
+			State:  device.StateDevice,
+			Kind:   device.KindEmulator,
+			Model:  "phone",
+		}},
+		DebugPackages: map[string]bool{"com.alvo": true},
+	}
 }
 
 func TestPullHuman(t *testing.T) {

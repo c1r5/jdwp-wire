@@ -18,10 +18,17 @@ type projectWriter interface {
 func newAttachCmd(cfg runConfig) *cobra.Command {
 	c := &cobra.Command{
 		Use:   "attach <pkg>",
-		Short: "Forward JDWP for an already-installed debuggable app (does not patch or install)",
-		Args:  cobra.ExactArgs(1),
+		Short: "Forward JDWP, repackaging the installed app when it is not debuggable",
+		Long: `Attach a JDWP session for an installed package.
+
+If the package is not debuggable, attach pulls it, sets android:debuggable and a user-CA network security config, re-signs, and reinstalls. That replaces the installed app. When the official Android CLI is on PATH, that install and launch use android run --debug. Otherwise adb install and am set-debug-app are used.
+
+An already debuggable package is not pulled or patched. Launch stays on adb.
+
+--studio writes .jdt/<pkg>/idea after the forward and does not open Android Studio.`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(c *cobra.Command, args []string) error {
-			ctx, cancel := context.WithTimeout(c.Context(), cfg.jdwpTimeout)
+			ctx, cancel := context.WithTimeout(c.Context(), cfg.apkTimeout+cfg.jdwpTimeout)
 			defer cancel()
 			serial, err := c.Flags().GetString("serial")
 			if err != nil {
@@ -46,6 +53,9 @@ func newAttachCmd(cfg runConfig) *cobra.Command {
 				CWD:     cfg.cwd,
 				Studio:  studio,
 				Writer:  cfg.projects,
+				APK:     cfg.apk,
+				Patch:   cfg.patch,
+				Android: cfg.android,
 			})
 			if err != nil {
 				return err
@@ -63,17 +73,52 @@ func newAttachCmd(cfg runConfig) *cobra.Command {
 }
 
 func writeAttachHuman(w io.Writer, res attach.Result) error {
-	sess := res.Session
-	if _, err := fmt.Fprintf(w, "[ok] debug-app: %s\n", sess.Package); err != nil {
-		return err
-	}
-	if sess.Activity != "" {
-		if _, err := fmt.Fprintf(w, "[ok] launch: %s\n", sess.Activity); err != nil {
+	if res.Repackaged {
+		if _, err := fmt.Fprintf(w, "[ok] pull: %s\n", res.PullAPK); err != nil {
 			return err
 		}
-	} else {
-		if _, err := fmt.Fprintf(w, "[ok] launch: monkey %s\n", sess.Package); err != nil {
+		if _, err := fmt.Fprintf(w, "[ok] decode: %s\n", res.DecodeDir); err != nil {
 			return err
+		}
+		if err := writePatchHuman(w, res.Patch); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(w, "[ok] sign: %s\n", res.Signed); err != nil {
+			return err
+		}
+		if res.Launch == attach.LaunchAndroid {
+			if _, err := fmt.Fprintln(w, "[ok] launch: android run --debug"); err != nil {
+				return err
+			}
+		} else {
+			if _, err := fmt.Fprintln(w, "[skip] android: cli unavailable"); err != nil {
+				return err
+			}
+			if _, err := fmt.Fprintf(w, "[ok] install: %s\n", res.Signed); err != nil {
+				return err
+			}
+		}
+	} else {
+		if _, err := fmt.Fprintln(w, "[skip] patch: already debuggable"); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintln(w, "[skip] android: no patched apks"); err != nil {
+			return err
+		}
+	}
+	sess := res.Session
+	if res.Launch != attach.LaunchAndroid {
+		if _, err := fmt.Fprintf(w, "[ok] debug-app: %s\n", sess.Package); err != nil {
+			return err
+		}
+		if sess.Activity != "" {
+			if _, err := fmt.Fprintf(w, "[ok] launch: %s\n", sess.Activity); err != nil {
+				return err
+			}
+		} else {
+			if _, err := fmt.Fprintf(w, "[ok] launch: monkey %s\n", sess.Package); err != nil {
+				return err
+			}
 		}
 	}
 	if _, err := fmt.Fprintf(w, "[ok] jdwp: pid %d\n", sess.PID); err != nil {
@@ -83,9 +128,6 @@ func writeAttachHuman(w io.Writer, res attach.Result) error {
 		return err
 	}
 	if _, err := fmt.Fprintf(w, "[ok] probe: 127.0.0.1:%d\n", sess.Port); err != nil {
-		return err
-	}
-	if _, err := fmt.Fprintln(w, "[skip] patch: use jdt patch and jdt install first"); err != nil {
 		return err
 	}
 	var studio string
@@ -111,22 +153,26 @@ type studioJSON struct {
 }
 
 type attachJSON struct {
-	Package  string      `json:"package"`
-	Serial   string      `json:"serial"`
-	PID      int         `json:"pid"`
-	Port     int         `json:"port"`
-	Activity string      `json:"activity"`
-	Studio   *studioJSON `json:"studio,omitempty"`
+	Package    string      `json:"package"`
+	Serial     string      `json:"serial"`
+	PID        int         `json:"pid"`
+	Port       int         `json:"port"`
+	Activity   string      `json:"activity"`
+	Repackaged bool        `json:"repackaged"`
+	Launch     string      `json:"launch"`
+	Studio     *studioJSON `json:"studio,omitempty"`
 }
 
 func writeAttachJSON(w io.Writer, res attach.Result) error {
 	sess := res.Session
 	out := attachJSON{
-		Package:  sess.Package,
-		Serial:   sess.Serial,
-		PID:      sess.PID,
-		Port:     sess.Port,
-		Activity: sess.Activity,
+		Package:    sess.Package,
+		Serial:     sess.Serial,
+		PID:        sess.PID,
+		Port:       sess.Port,
+		Activity:   sess.Activity,
+		Repackaged: res.Repackaged,
+		Launch:     string(res.Launch),
 	}
 	switch res.Studio {
 	case attach.StudioWritten:

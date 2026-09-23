@@ -9,9 +9,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/c1r5/jdwp-wire/internal/androidcli"
+	"github.com/c1r5/jdwp-wire/internal/apk"
 	"github.com/c1r5/jdwp-wire/internal/device"
 	"github.com/c1r5/jdwp-wire/internal/jdwp"
+	"github.com/c1r5/jdwp-wire/internal/patch"
 	"github.com/c1r5/jdwp-wire/internal/project"
+	"github.com/c1r5/jdwp-wire/internal/workspace"
 )
 
 func TestAttachHuman(t *testing.T) {
@@ -48,13 +52,79 @@ func TestAttachHuman(t *testing.T) {
 		"[ok] jdwp: pid 4242",
 		"[ok] forward: tcp:8700 -> jdwp:4242",
 		"[ok] probe: 127.0.0.1:8700",
-		"[skip] patch: use jdt patch and jdt install first",
+		"[skip] patch: already debuggable",
+		"[skip] android: no patched apks",
 		"[skip] studio: pass --studio",
 		"attach: localhost:8700",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("stdout missing %q:\n%s", want, out)
 		}
+	}
+}
+
+func TestAttachRepackageAndroid(t *testing.T) {
+	t.Parallel()
+	cwd := t.TempDir()
+	var stdout, stderr bytes.Buffer
+	code := run(runConfig{
+		stdout: &stdout,
+		stderr: &stderr,
+		cwd:    cwd,
+		device: &device.Fake{Devices: []device.Device{{
+			Serial: "emulator-5554",
+			State:  device.StateDevice,
+		}}},
+		apk: &apk.Fake{
+			PullFn: func(_ context.Context, _, pkg string, _ workspace.Layout) (apk.Artifact, error) {
+				return apk.Artifact{Package: pkg, APK: "/apk/base.apk"}, nil
+			},
+			DecodeFn: func(_ context.Context, _ string, layout workspace.Layout) (apk.Decoded, error) {
+				if err := os.MkdirAll(layout.Decode, 0o755); err != nil {
+					return apk.Decoded{}, err
+				}
+				if err := os.WriteFile(filepath.Join(layout.Decode, "apktool.yml"), []byte("version: 2\n"), 0o644); err != nil {
+					return apk.Decoded{}, err
+				}
+				return apk.Decoded{Dir: layout.Decode, Package: "com.alvo"}, nil
+			},
+			BuildFn: func(_ context.Context, _, out string) (apk.Artifact, error) {
+				return apk.Artifact{APK: out}, nil
+			},
+			SignFn: func(_ context.Context, path, _ string) (apk.Artifact, error) {
+				return apk.Artifact{APK: path}, nil
+			},
+		},
+		patch: &patch.Fake{ApplyFn: func(dir string) (patch.Result, error) {
+			return patch.Result{Dir: dir, Debuggable: patch.ActionApplied, NSC: patch.ActionApplied}, nil
+		}},
+		android: &androidcli.Fake{
+			AvailableFn: func(context.Context) (bool, error) { return true, nil },
+			RunDebugFn:  func(context.Context, string, []string) error { return nil },
+		},
+		jdwp: &jdwp.Fake{BindFn: func(_ context.Context, serial, pkg string, port int) (jdwp.Session, error) {
+			return jdwp.Session{Package: pkg, Serial: serial, PID: 8, Port: port}, nil
+		}},
+		args: []string{"attach", "com.alvo"},
+	})
+	if code != ExitOK {
+		t.Fatalf("exit %d stderr=%q", code, stderr.String())
+	}
+	out := stdout.String()
+	for _, want := range []string{
+		"[ok] pull: /apk/base.apk",
+		"[ok] patch: debuggable",
+		"[ok] patch: nsc user CA",
+		"[ok] launch: android run --debug",
+		"[ok] jdwp: pid 8",
+		"attach: localhost:8700",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "debug-app") {
+		t.Fatalf("adb launch in android path:\n%s", out)
 	}
 }
 
@@ -100,16 +170,18 @@ func TestAttachJSON(t *testing.T) {
 		t.Fatalf("exit %d stderr=%q", code, stderr.String())
 	}
 	var got struct {
-		Package  string `json:"package"`
-		Serial   string `json:"serial"`
-		PID      int    `json:"pid"`
-		Port     int    `json:"port"`
-		Activity string `json:"activity"`
+		Package    string `json:"package"`
+		Serial     string `json:"serial"`
+		PID        int    `json:"pid"`
+		Port       int    `json:"port"`
+		Activity   string `json:"activity"`
+		Repackaged bool   `json:"repackaged"`
+		Launch     string `json:"launch"`
 	}
 	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
 		t.Fatal(err)
 	}
-	if got.Package != "com.alvo" || got.Serial != "emulator-5554" || got.PID != 4242 || got.Port != 9000 || got.Activity != "com.alvo/.MainActivity" {
+	if got.Package != "com.alvo" || got.Serial != "emulator-5554" || got.PID != 4242 || got.Port != 9000 || got.Activity != "com.alvo/.MainActivity" || got.Repackaged || got.Launch != "adb" {
 		t.Fatalf("%+v", got)
 	}
 	if strings.Contains(stdout.String(), "studio") {

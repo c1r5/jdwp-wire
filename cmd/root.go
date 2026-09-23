@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/c1r5/jdwp-wire/internal/androidcli"
 	"github.com/c1r5/jdwp-wire/internal/apk"
 	"github.com/c1r5/jdwp-wire/internal/device"
 	"github.com/c1r5/jdwp-wire/internal/execx"
@@ -39,6 +40,7 @@ type runConfig struct {
 	apk         apk.Client
 	patch       patch.Applier
 	jdwp        jdwp.Client
+	android     androidcli.Client
 	projects    projectWriter
 	timeout     time.Duration
 	apkTimeout  time.Duration
@@ -84,6 +86,9 @@ func run(cfg runConfig) int {
 	}
 	if cfg.jdwp == nil {
 		cfg.jdwp = jdwp.New(execx.Exec{}, cfg.device)
+	}
+	if cfg.android == nil {
+		cfg.android = androidcli.New(execx.Exec{})
 	}
 	if cfg.projects == nil {
 		cfg.projects = project.FS{}
@@ -135,14 +140,14 @@ func newRoot(cfg runConfig) *cobra.Command {
 
 func exitCode(err error) int {
 	switch {
-	case errors.Is(err, device.ErrToolMissing), errors.Is(err, apk.ErrToolMissing), errors.Is(err, jdwp.ErrToolMissing):
+	case errors.Is(err, device.ErrToolMissing), errors.Is(err, apk.ErrToolMissing), errors.Is(err, jdwp.ErrToolMissing), errors.Is(err, androidcli.ErrToolMissing):
 		return ExitToolMissing
 	case errors.Is(err, device.ErrNoDevice),
 		errors.Is(err, device.ErrAmbiguousDevice),
 		errors.Is(err, device.ErrDeviceUnusable),
 		errors.Is(err, device.ErrDeviceNotFound):
 		return ExitNoDevice
-	case errors.Is(err, device.ErrUsage), errors.Is(err, apk.ErrUsage), errors.Is(err, patch.ErrUsage), errors.Is(err, jdwp.ErrUsage), errors.Is(err, targets.ErrUsage), errors.Is(err, project.ErrUsage):
+	case errors.Is(err, device.ErrUsage), errors.Is(err, apk.ErrUsage), errors.Is(err, patch.ErrUsage), errors.Is(err, jdwp.ErrUsage), errors.Is(err, targets.ErrUsage), errors.Is(err, project.ErrUsage), errors.Is(err, androidcli.ErrUsage):
 		return ExitUsage
 	}
 	msg := err.Error()

@@ -4,7 +4,7 @@ CLI (`jdt`) that turns an Android APK/package into a JDWP session usable from An
 
 This is not MobSF. It is not Frida-first. The main path is **smali/Java + JVM debugger**.
 
-Status: **MVP in progress**. Wired so far: `jdt devices`, `jdt apps`, `jdt pull`, `jdt patch`, `jdt install`, `jdt attach`, `jdt reset`, `jdt targets`. `jdt attach --studio` writes `.jdt/<pkg>/idea` after the JDWP forward and does not launch Android Studio. `--crypto` on targets is v1. `jdt apps` lists installed packages (PID when running); `jdt pull <index>` uses that list.
+Status: **MVP wired**. `jdt devices`, `jdt apps`, `jdt pull`, `jdt patch`, `jdt install`, `jdt attach`, `jdt reset`, `jdt targets`. `jdt attach` repackages an installed app that is not debuggable (pull, debuggable + user CA, re-sign, reinstall) and then forwards JDWP. An already debuggable app skips that. When the official Android CLI is on PATH, the repackage launches with `android run --debug`; otherwise `adb` + `am`. `jdt attach --studio` writes `.jdt/<pkg>/idea` after the forward and does not launch Android Studio. `--crypto` on targets is v1. `jdt apps` lists installed packages (PID when running); `jdt pull <index>` uses that list.
 
 Happy path (`com.alvo` is the package). With more than one device, pass `-s <serial>` on `pull`, `install`, and `attach`.
 
@@ -35,7 +35,7 @@ Happy path (`com.alvo` is the package). With more than one device, pass `-s <ser
                              v
 ┌─ 5. attach ───────────────────────────────────────────┐
 │ jdt attach com.alvo --port 8700 --studio              │
-│ set-debug-app -w, launch, adb forward, probe          │
+│ repack if not debuggable, then forward + probe        │
 │ → .jdt/com.alvo/idea                                  │
 │ → attach: localhost:8700                              │
 └────────────────────────────┬──────────────────────────┘
