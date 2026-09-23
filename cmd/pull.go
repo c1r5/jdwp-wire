@@ -7,6 +7,7 @@ import (
 	"io"
 
 	"github.com/c1r5/jdwp-wire/internal/apk"
+	"github.com/c1r5/jdwp-wire/internal/logging"
 	"github.com/c1r5/jdwp-wire/internal/pull"
 	"github.com/spf13/cobra"
 )
@@ -51,12 +52,11 @@ func newPullCmd(cfg runConfig) *cobra.Command {
 			if asJSON {
 				return writePullJSON(c.OutOrStdout(), res.Artifact, res.DecodeDir)
 			}
-			if err := writePullHuman(c.OutOrStdout(), res.Artifact); err != nil {
+			if err := writePullHuman(cfg.logger, res.Artifact); err != nil {
 				return err
 			}
 			if doDecode {
-				_, err := fmt.Fprintf(c.OutOrStdout(), "[ok] decode: %s\n", res.DecodeDir)
-				return err
+				cfg.logger.OK("decode", res.DecodeDir)
 			}
 			return nil
 		},
@@ -67,14 +67,10 @@ func newPullCmd(cfg runConfig) *cobra.Command {
 	return c
 }
 
-func writePullHuman(w io.Writer, art apk.Artifact) error {
-	if _, err := fmt.Fprintf(w, "[ok] pull: %s → %s\n", art.Package, art.APK); err != nil {
-		return err
-	}
+func writePullHuman(lg *logging.Logger, art apk.Artifact) error {
+	lg.OK("pull", art.Package+" → "+art.APK)
 	for _, s := range art.Splits {
-		if _, err := fmt.Fprintf(w, "[ok] pull: %s\n", s); err != nil {
-			return err
-		}
+		lg.OK("pull", s)
 	}
 	return nil
 }

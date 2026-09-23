@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -94,7 +95,7 @@ func TestTargetsEmpty(t *testing.T) {
 	if code != ExitOK {
 		t.Fatalf("exit %d stderr=%q", code, stderr.String())
 	}
-	if stdout.String() != "[skip] targets: no http sinks\n" {
+	if !regexp.MustCompile(`^\d{2}:\d{2}:\d{2} \[skip\] \[targets\] no http sinks\n$`).MatchString(stdout.String()) {
 		t.Fatalf("stdout=%q", stdout.String())
 	}
 }

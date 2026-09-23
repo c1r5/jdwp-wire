@@ -95,21 +95,21 @@ func TestAttachHuman(t *testing.T) {
 	}
 	out := stdout.String()
 	for _, want := range []string{
-		"[ok] pull: /apk/base.apk",
-		"[ok] decode:",
-		"[skip] patch: already debuggable",
-		"[skip] patch: nsc already trusts user CA",
-		"[ok] sign:",
-		"[skip] android: cli unavailable",
-		"[ok] install:",
-		"[ok] debug-app: com.alvo",
-		"[ok] launch: com.alvo/.MainActivity",
-		"[ok] jdwp: pid 4242",
-		"[ok] device: emulator emulator-5554 phone",
-		"[ok] forward: adb -s emulator-5554 tcp:8700 -> jdwp:4242",
-		"[skip] probe: jdwp socket left for the debugger",
-		"[skip] studio: pass --studio",
-		"attach: 127.0.0.1:8700",
+		"[ok] [pull] /apk/base.apk",
+		"[ok] [decode] ",
+		"[skip] [patch] already debuggable",
+		"[skip] [patch] nsc already trusts user CA",
+		"[ok] [sign] ",
+		"[skip] [android] cli unavailable",
+		"[ok] [install] ",
+		"[ok] [debug-app] com.alvo",
+		"[ok] [launch] com.alvo/.MainActivity",
+		"[ok] [jdwp] pid 4242",
+		"[ok] [device] emulator emulator-5554 phone",
+		"[ok] [forward] adb -s emulator-5554 tcp:8700 -> jdwp:4242",
+		"[skip] [probe] jdwp socket left for the debugger",
+		"[skip] [studio] pass --studio",
+		"[ok] [attach] 127.0.0.1:8700",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("stdout missing %q:\n%s", want, out)
@@ -166,12 +166,12 @@ func TestAttachRepackageAndroid(t *testing.T) {
 	}
 	out := stdout.String()
 	for _, want := range []string{
-		"[ok] pull: /apk/base.apk",
-		"[ok] patch: debuggable",
-		"[ok] patch: nsc user CA",
-		"[ok] launch: android run --debug",
-		"[ok] jdwp: pid 8",
-		"attach: 127.0.0.1:8700",
+		"[ok] [pull] /apk/base.apk",
+		"[ok] [patch] debuggable",
+		"[ok] [patch] nsc user CA",
+		"[ok] [launch] android run --debug",
+		"[ok] [jdwp] pid 8",
+		"[ok] [attach] 127.0.0.1:8700",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q\n%s", want, out)
@@ -197,7 +197,7 @@ func TestAttachMonkeyLaunchLine(t *testing.T) {
 	if code != ExitOK {
 		t.Fatalf("exit %d stderr=%q", code, stderr.String())
 	}
-	if !strings.Contains(stdout.String(), "[ok] launch: monkey com.alvo") {
+	if !strings.Contains(stdout.String(), "[ok] [launch] monkey com.alvo") {
 		t.Fatalf("stdout=%q", stdout.String())
 	}
 }
@@ -309,7 +309,7 @@ func TestAttachStudioOffDoesNotWrite(t *testing.T) {
 	if code != ExitOK {
 		t.Fatalf("exit %d stderr=%q", code, stderr.String())
 	}
-	if !strings.Contains(stdout.String(), "[skip] studio: pass --studio") {
+	if !strings.Contains(stdout.String(), "[skip] [studio] pass --studio") {
 		t.Fatalf("stdout=%q", stdout.String())
 	}
 }
@@ -339,7 +339,7 @@ func TestAttachStudioWrites(t *testing.T) {
 		t.Fatalf("exit %d stderr=%q", code, stderr.String())
 	}
 	idea := filepath.Join(cwd, ".jdt", "com.alvo", "idea")
-	if !strings.Contains(stdout.String(), "[ok] studio: "+idea+"\n") {
+	if !strings.Contains(stdout.String(), "[ok] [studio] "+idea+"\n") {
 		t.Fatalf("stdout=%q", stdout.String())
 	}
 	for _, name := range []string{
@@ -372,7 +372,7 @@ func TestAttachStudioNoDecode(t *testing.T) {
 		t.Fatalf("exit %d stderr=%q", code, stderr.String())
 	}
 	idea := filepath.Join(cwd, ".jdt", "com.alvo", "idea")
-	if !strings.Contains(stdout.String(), "[ok] studio: "+idea+"\n") {
+	if !strings.Contains(stdout.String(), "[ok] [studio] "+idea+"\n") {
 		t.Fatalf("stdout=%q", stdout.String())
 	}
 	if _, err := os.Stat(filepath.Join(idea, "decode.iml")); err != nil {
@@ -495,10 +495,10 @@ func TestResetHuman(t *testing.T) {
 		t.Fatalf("reset %s %s %d", gotSerial, gotPkg, gotPort)
 	}
 	out := stdout.String()
-	if !strings.Contains(out, "[ok] reset: clear-debug-app com.alvo") {
+	if !strings.Contains(out, "[ok] [reset] clear-debug-app com.alvo") {
 		t.Fatalf("stdout=%q", out)
 	}
-	if !strings.Contains(out, "[ok] reset: remove forward tcp:8700") {
+	if !strings.Contains(out, "[ok] [reset] remove forward tcp:8700") {
 		t.Fatalf("stdout=%q", out)
 	}
 }

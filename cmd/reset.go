@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/c1r5/jdwp-wire/internal/logging"
 	"github.com/c1r5/jdwp-wire/internal/reset"
 	"github.com/spf13/cobra"
 )
@@ -37,7 +38,7 @@ func newResetCmd(cfg runConfig) *cobra.Command {
 			if asJSON {
 				return writeResetJSON(c.OutOrStdout(), res.Package, res.Serial, res.Port)
 			}
-			return writeResetHuman(c.OutOrStdout(), res.Package, res.Port)
+			return writeResetHuman(cfg.logger, res.Package, res.Port)
 		},
 	}
 	c.Flags().StringP("serial", "s", "", "adb serial (required if multiple devices)")
@@ -45,12 +46,10 @@ func newResetCmd(cfg runConfig) *cobra.Command {
 	return c
 }
 
-func writeResetHuman(w io.Writer, pkg string, port int) error {
-	if _, err := fmt.Fprintf(w, "[ok] reset: clear-debug-app %s\n", pkg); err != nil {
-		return err
-	}
-	_, err := fmt.Fprintf(w, "[ok] reset: remove forward tcp:%d\n", port)
-	return err
+func writeResetHuman(lg *logging.Logger, pkg string, port int) error {
+	lg.OK("reset", "clear-debug-app "+pkg)
+	lg.OK("reset", fmt.Sprintf("remove forward tcp:%d", port))
+	return nil
 }
 
 type resetJSON struct {

@@ -37,7 +37,7 @@ Happy path (`com.alvo` is the package). With more than one device, pass `-s <ser
 │ jdt attach com.alvo --port 8700 --studio              │
 │ repack if not debuggable, then forward + probe        │
 │ → .jdt/com.alvo/idea                                  │
-│ → attach: 127.0.0.1:8700                             │
+│ → 15:04:05 [ok] [attach] 127.0.0.1:8700               │
 └────────────────────────────┬──────────────────────────┘
                              │
                              v

@@ -6,6 +6,7 @@ import (
 	"io"
 	"path/filepath"
 
+	"github.com/c1r5/jdwp-wire/internal/logging"
 	"github.com/c1r5/jdwp-wire/internal/patch"
 	"github.com/c1r5/jdwp-wire/internal/patchapply"
 	"github.com/spf13/cobra"
@@ -52,7 +53,7 @@ func newPatchCmd(cfg runConfig) *cobra.Command {
 			if asJSON {
 				return writePatchJSON(c.OutOrStdout(), res)
 			}
-			return writePatchHuman(c.OutOrStdout(), res)
+			return writePatchHuman(cfg.logger, res)
 		},
 	}
 	c.Flags().String("apk", "", "local APK to decode then patch (requires --package)")
@@ -60,24 +61,16 @@ func newPatchCmd(cfg runConfig) *cobra.Command {
 	return c
 }
 
-func writePatchHuman(w io.Writer, res patch.Result) error {
+func writePatchHuman(lg *logging.Logger, res patch.Result) error {
 	if res.Debuggable == patch.ActionApplied {
-		if _, err := fmt.Fprintln(w, "[ok] patch: debuggable"); err != nil {
-			return err
-		}
+		lg.OK("patch", "debuggable")
 	} else {
-		if _, err := fmt.Fprintln(w, "[skip] patch: already debuggable"); err != nil {
-			return err
-		}
+		lg.Skip("patch", "already debuggable")
 	}
 	if res.NSC == patch.ActionApplied {
-		if _, err := fmt.Fprintln(w, "[ok] patch: nsc user CA"); err != nil {
-			return err
-		}
+		lg.OK("patch", "nsc user CA")
 	} else {
-		if _, err := fmt.Fprintln(w, "[skip] patch: nsc already trusts user CA"); err != nil {
-			return err
-		}
+		lg.Skip("patch", "nsc already trusts user CA")
 	}
 	return nil
 }

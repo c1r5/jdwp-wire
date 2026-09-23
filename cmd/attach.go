@@ -9,6 +9,7 @@ import (
 
 	"github.com/c1r5/jdwp-wire/internal/attach"
 	"github.com/c1r5/jdwp-wire/internal/device"
+	"github.com/c1r5/jdwp-wire/internal/logging"
 	"github.com/c1r5/jdwp-wire/internal/project"
 	"github.com/spf13/cobra"
 )
@@ -65,7 +66,7 @@ Install replaces the installed app with a debug build signed by jdt. A signature
 			if asJSON {
 				return writeAttachJSON(c.OutOrStdout(), res)
 			}
-			return writeAttachHuman(c.OutOrStdout(), res)
+			return writeAttachHuman(cfg.logger, res)
 		},
 	}
 	c.Flags().StringP("serial", "s", "", "adb serial (required if multiple devices)")
@@ -82,81 +83,47 @@ func formatDevice(d device.Device) string {
 	return strings.Join(parts, " ")
 }
 
-func writeAttachHuman(w io.Writer, res attach.Result) error {
+func writeAttachHuman(lg *logging.Logger, res attach.Result) error {
 	if res.SkipDecode {
-		if _, err := fmt.Fprintln(w, "[skip] pull: decode already exists"); err != nil {
-			return err
-		}
-		if _, err := fmt.Fprintf(w, "[skip] decode: %s\n", res.DecodeDir); err != nil {
-			return err
-		}
+		lg.Skip("pull", "decode already exists")
+		lg.Skip("decode", res.DecodeDir)
 	} else {
-		if _, err := fmt.Fprintf(w, "[ok] pull: %s\n", res.PullAPK); err != nil {
-			return err
-		}
-		if _, err := fmt.Fprintf(w, "[ok] decode: %s\n", res.DecodeDir); err != nil {
-			return err
-		}
+		lg.OK("pull", res.PullAPK)
+		lg.OK("decode", res.DecodeDir)
 	}
-	if err := writePatchHuman(w, res.Patch); err != nil {
+	if err := writePatchHuman(lg, res.Patch); err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintf(w, "[ok] sign: %s\n", res.Signed); err != nil {
-		return err
-	}
+	lg.OK("sign", res.Signed)
 	if res.Launch == attach.LaunchAndroid {
-		if _, err := fmt.Fprintln(w, "[ok] launch: android run --debug"); err != nil {
-			return err
-		}
+		lg.OK("launch", "android run --debug")
 	} else {
-		if _, err := fmt.Fprintln(w, "[skip] android: cli unavailable"); err != nil {
-			return err
-		}
-		if _, err := fmt.Fprintf(w, "[ok] install: %s\n", res.Signed); err != nil {
-			return err
-		}
+		lg.Skip("android", "cli unavailable")
+		lg.OK("install", res.Signed)
 	}
 	sess := res.Session
 	if res.Launch != attach.LaunchAndroid {
-		if _, err := fmt.Fprintf(w, "[ok] debug-app: %s\n", sess.Package); err != nil {
-			return err
-		}
+		lg.OK("debug-app", sess.Package)
 		if sess.Activity != "" {
-			if _, err := fmt.Fprintf(w, "[ok] launch: %s\n", sess.Activity); err != nil {
-				return err
-			}
+			lg.OK("launch", sess.Activity)
 		} else {
-			if _, err := fmt.Fprintf(w, "[ok] launch: monkey %s\n", sess.Package); err != nil {
-				return err
-			}
+			lg.OK("launch", "monkey "+sess.Package)
 		}
 	}
-	if _, err := fmt.Fprintf(w, "[ok] jdwp: pid %d\n", sess.PID); err != nil {
-		return err
-	}
-	if _, err := fmt.Fprintf(w, "[ok] device: %s\n", formatDevice(res.Device)); err != nil {
-		return err
-	}
-	if _, err := fmt.Fprintf(w, "[ok] forward: adb -s %s tcp:%d -> jdwp:%d\n", sess.Serial, sess.Port, sess.PID); err != nil {
-		return err
-	}
-	if _, err := fmt.Fprintln(w, "[skip] probe: jdwp socket left for the debugger"); err != nil {
-		return err
-	}
-	var studio string
+	lg.OK("jdwp", fmt.Sprintf("pid %d", sess.PID))
+	lg.OK("device", formatDevice(res.Device))
+	lg.OK("forward", fmt.Sprintf("adb -s %s tcp:%d -> jdwp:%d", sess.Serial, sess.Port, sess.PID))
+	lg.Skip("probe", "jdwp socket left for the debugger")
 	switch res.Studio {
 	case attach.StudioWritten:
-		studio = fmt.Sprintf("[ok] studio: %s", res.Project.Dir)
+		lg.OK("studio", res.Project.Dir)
 	case attach.StudioNoDecode:
-		studio = "[skip] studio: no decode"
+		lg.Skip("studio", "no decode")
 	default:
-		studio = "[skip] studio: pass --studio"
+		lg.Skip("studio", "pass --studio")
 	}
-	if _, err := fmt.Fprintln(w, studio); err != nil {
-		return err
-	}
-	_, err := fmt.Fprintf(w, "attach: 127.0.0.1:%d\n", sess.Port)
-	return err
+	lg.OK("attach", fmt.Sprintf("127.0.0.1:%d", sess.Port))
+	return nil
 }
 
 type studioJSON struct {

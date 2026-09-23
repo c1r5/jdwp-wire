@@ -7,6 +7,7 @@ import (
 	"io"
 
 	"github.com/c1r5/jdwp-wire/internal/install"
+	"github.com/c1r5/jdwp-wire/internal/logging"
 	"github.com/spf13/cobra"
 )
 
@@ -46,7 +47,7 @@ func newInstallCmd(cfg runConfig) *cobra.Command {
 			if asJSON {
 				return writeInstallJSON(c.OutOrStdout(), res.APK, res.Splits, res.Serial)
 			}
-			return writeInstallHuman(c.OutOrStdout(), apks, res.Encoded)
+			return writeInstallHuman(cfg.logger, apks, res.Encoded)
 		},
 	}
 	c.Flags().StringP("serial", "s", "", "adb serial (required if multiple devices)")
@@ -54,24 +55,18 @@ func newInstallCmd(cfg runConfig) *cobra.Command {
 	return c
 }
 
-func writeInstallHuman(w io.Writer, apks []string, encoded bool) error {
+func writeInstallHuman(lg *logging.Logger, apks []string, encoded bool) error {
 	if len(apks) == 0 {
 		return nil
 	}
 	if encoded {
-		if _, err := fmt.Fprintf(w, "[ok] encode: %s\n", apks[0]); err != nil {
-			return err
-		}
+		lg.OK("encode", apks[0])
 	}
 	for _, p := range apks {
-		if _, err := fmt.Fprintf(w, "[ok] sign: %s\n", p); err != nil {
-			return err
-		}
+		lg.OK("sign", p)
 	}
 	for _, p := range apks {
-		if _, err := fmt.Fprintf(w, "[ok] install: %s\n", p); err != nil {
-			return err
-		}
+		lg.OK("install", p)
 	}
 	return nil
 }

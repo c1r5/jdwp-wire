@@ -97,6 +97,7 @@ O pipeline do attach começa no decode e termina no install, e em seguida faz `a
 | `capture` | dump JDWP do frame → JSON/HAR              | não | `watch --dump-okhttp` |
 | `frida`   | companion unpin / hide-debugger            | não | `--unpin` opcional |
 | `android` | shell-out p/ Android CLI se estiver no PATH | detect + `run --debug` | emulator, layout |
+| `logging` | linha humana `HH:MM:SS [ok\|skip] [módulo] ação`; só este pacote importa a lib de log | sim | — |
 
 Frida não é o caminho principal. Entra só quando JDWP sozinho não segura (pinning, anti-debug).
 
@@ -154,7 +155,7 @@ Inclui:
 6. `jdt reset` (clear-debug-app + remove forward).
 7. Módulo `project`: escreve o esqueleto IntelliJ em `.jdt/<pkg>/idea` (Remote Debug `127.0.0.1:PORT`, content root = decode já existente). `jdt attach --studio` chama isto depois do forward. Sem decode, imprime skip e o attach segue.
 8. `jdt targets --http`: grep/parse raso de OkHttp / Retrofit / `HttpURLConnection` no decode; imprime `classe#metodo`.
-9. Log em texto: cada passo, skip, e o one-liner de attach.
+9. Log em texto via `internal/logging`: cada passo é `HH:MM:SS [ok|skip] [módulo] ação` (cor no TTY), e o one-liner de attach é `[ok] [attach] 127.0.0.1:PORT`.
 10. `jdt apps`: packages instalados (PID se o processo existe). `jdt pull` aceita o IDX dessa lista, além de package ou APK local. O nome é o label não-localizado; label de resource fica pro package.
 
 Não inclui no MVP:

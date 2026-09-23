@@ -13,6 +13,7 @@ import (
 	"github.com/c1r5/jdwp-wire/internal/device"
 	"github.com/c1r5/jdwp-wire/internal/execx"
 	"github.com/c1r5/jdwp-wire/internal/jdwp"
+	"github.com/c1r5/jdwp-wire/internal/logging"
 	"github.com/c1r5/jdwp-wire/internal/patch"
 	"github.com/c1r5/jdwp-wire/internal/project"
 	"github.com/c1r5/jdwp-wire/internal/targets"
@@ -42,6 +43,7 @@ type runConfig struct {
 	jdwp        jdwp.Client
 	android     androidcli.Client
 	projects    projectWriter
+	logger      *logging.Logger
 	timeout     time.Duration
 	apkTimeout  time.Duration
 	jdwpTimeout time.Duration
@@ -92,6 +94,9 @@ func run(cfg runConfig) int {
 	}
 	if cfg.projects == nil {
 		cfg.projects = project.FS{}
+	}
+	if cfg.logger == nil {
+		cfg.logger = logging.New(cfg.stdout)
 	}
 	if cfg.cwd == "" {
 		if wd, err := os.Getwd(); err == nil {
