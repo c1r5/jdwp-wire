@@ -13,6 +13,7 @@ import (
 	"github.com/c1r5/jdwp-wire/internal/execx"
 	"github.com/c1r5/jdwp-wire/internal/jdwp"
 	"github.com/c1r5/jdwp-wire/internal/patch"
+	"github.com/c1r5/jdwp-wire/internal/targets"
 	"github.com/spf13/cobra"
 )
 
@@ -122,6 +123,7 @@ func newRoot(cfg runConfig) *cobra.Command {
 	root.AddCommand(newPatchCmd(cfg))
 	root.AddCommand(newAttachCmd(cfg))
 	root.AddCommand(newResetCmd(cfg))
+	root.AddCommand(newTargetsCmd(cfg))
 	return root
 }
 
@@ -134,7 +136,7 @@ func exitCode(err error) int {
 		errors.Is(err, device.ErrDeviceUnusable),
 		errors.Is(err, device.ErrDeviceNotFound):
 		return ExitNoDevice
-	case errors.Is(err, device.ErrUsage), errors.Is(err, apk.ErrUsage), errors.Is(err, patch.ErrUsage), errors.Is(err, jdwp.ErrUsage):
+	case errors.Is(err, device.ErrUsage), errors.Is(err, apk.ErrUsage), errors.Is(err, patch.ErrUsage), errors.Is(err, jdwp.ErrUsage), errors.Is(err, targets.ErrUsage):
 		return ExitUsage
 	}
 	msg := err.Error()
