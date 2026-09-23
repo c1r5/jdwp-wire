@@ -21,10 +21,12 @@ type Deps struct {
 }
 
 // Request is the parsed input for jdt install.
+// SignOnly builds and signs and does not call adb install.
 type Request struct {
-	Target  string
-	Serial  string
-	Package string
+	Target   string
+	Serial   string
+	Package  string
+	SignOnly bool
 }
 
 // Result is a signed APK set installed on a device.
@@ -62,8 +64,10 @@ func Run(ctx context.Context, deps Deps, req Request) (Result, error) {
 			apks[i] = signed.APK
 		}
 	}
-	if err := deps.APK.Install(ctx, dev.Serial, apks...); err != nil {
-		return Result{}, err
+	if !req.SignOnly {
+		if err := deps.APK.Install(ctx, dev.Serial, apks...); err != nil {
+			return Result{}, err
+		}
 	}
 	out := Result{APK: apks[0], Serial: dev.Serial, Encoded: p.Encoded}
 	if len(apks) > 1 {

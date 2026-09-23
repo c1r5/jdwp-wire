@@ -66,6 +66,29 @@ func attachRunner(t *testing.T, cmds *[][]string) execx.Runner {
 	}}
 }
 
+func TestBindSkipsLaunch(t *testing.T) {
+	t.Parallel()
+	port := listenLocal(t)
+	var cmds [][]string
+	a := New(attachRunner(t, &cmds), &device.Fake{Procs: map[string][]device.Process{
+		"com.alvo": {{PID: 4242, Package: "com.alvo"}},
+	}})
+	a.poll = 0
+	got, err := a.Bind(withTimeout(t), "emu", "com.alvo", port)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Activity != "" || got.PID != 4242 || got.Port != port {
+		t.Fatalf("%+v", got)
+	}
+	for _, c := range cmds {
+		joined := strings.Join(c, " ")
+		if strings.Contains(joined, "set-debug-app") || strings.Contains(joined, "am start") || strings.Contains(joined, "monkey") {
+			t.Fatalf("launch command %v", c)
+		}
+	}
+}
+
 func TestAttachSession(t *testing.T) {
 	t.Parallel()
 	port := listenLocal(t)

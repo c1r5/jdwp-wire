@@ -41,6 +41,23 @@ func (a *ADB) Attach(ctx context.Context, serial, pkg string, port int) (Session
 	return Session{Package: pkg, Serial: serial, PID: pid, Port: port, Activity: act}, nil
 }
 
+func (a *ADB) Bind(ctx context.Context, serial, pkg string, port int) (Session, error) {
+	if err := validate(serial, pkg, port); err != nil {
+		return Session{}, fmt.Errorf("jdwp: bind: %w", err)
+	}
+	pid, err := a.waitPID(ctx, serial, pkg)
+	if err != nil {
+		return Session{}, err
+	}
+	if err := a.forward(ctx, serial, port, pid); err != nil {
+		return Session{}, err
+	}
+	if err := a.probe(ctx, port); err != nil {
+		return Session{}, err
+	}
+	return Session{Package: pkg, Serial: serial, PID: pid, Port: port}, nil
+}
+
 func (a *ADB) Reset(ctx context.Context, serial, pkg string, port int) error {
 	if err := validate(serial, pkg, port); err != nil {
 		return fmt.Errorf("jdwp: reset: %w", err)
