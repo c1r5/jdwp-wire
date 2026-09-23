@@ -13,6 +13,7 @@ import (
 	"github.com/c1r5/jdwp-wire/internal/execx"
 	"github.com/c1r5/jdwp-wire/internal/jdwp"
 	"github.com/c1r5/jdwp-wire/internal/patch"
+	"github.com/c1r5/jdwp-wire/internal/project"
 	"github.com/c1r5/jdwp-wire/internal/targets"
 	"github.com/spf13/cobra"
 )
@@ -38,6 +39,7 @@ type runConfig struct {
 	apk         apk.Client
 	patch       patch.Applier
 	jdwp        jdwp.Client
+	projects    projectWriter
 	timeout     time.Duration
 	apkTimeout  time.Duration
 	jdwpTimeout time.Duration
@@ -82,6 +84,9 @@ func run(cfg runConfig) int {
 	}
 	if cfg.jdwp == nil {
 		cfg.jdwp = jdwp.New(execx.Exec{}, cfg.device)
+	}
+	if cfg.projects == nil {
+		cfg.projects = project.FS{}
 	}
 	if cfg.cwd == "" {
 		if wd, err := os.Getwd(); err == nil {
@@ -137,7 +142,7 @@ func exitCode(err error) int {
 		errors.Is(err, device.ErrDeviceUnusable),
 		errors.Is(err, device.ErrDeviceNotFound):
 		return ExitNoDevice
-	case errors.Is(err, device.ErrUsage), errors.Is(err, apk.ErrUsage), errors.Is(err, patch.ErrUsage), errors.Is(err, jdwp.ErrUsage), errors.Is(err, targets.ErrUsage):
+	case errors.Is(err, device.ErrUsage), errors.Is(err, apk.ErrUsage), errors.Is(err, patch.ErrUsage), errors.Is(err, jdwp.ErrUsage), errors.Is(err, targets.ErrUsage), errors.Is(err, project.ErrUsage):
 		return ExitUsage
 	}
 	msg := err.Error()

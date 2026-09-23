@@ -17,8 +17,7 @@ func TestFakeWrite(t *testing.T) {
 			return Result{Dir: cfg.Layout.Idea, RunConfig: "Remote_Debug.xml"}, nil
 		},
 	}
-	var w Writer = f
-	got, err := w.Write(Config{Layout: workspace.Layout{Idea: "/x/idea", Decode: "/x/decode"}, Port: 8700})
+	got, err := f.Write(Config{Layout: workspace.Layout{Idea: "/x/idea", Decode: "/x/decode"}, Port: 8700})
 	if err != nil {
 		t.Fatal(err)
 	}

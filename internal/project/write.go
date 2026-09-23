@@ -13,8 +13,6 @@ var templates embed.FS
 
 const defaultPortOption = `<option name="PORT" value="8700" />`
 
-var _ Writer = FS{}
-
 func (FS) Write(cfg Config) (Result, error) {
 	if cfg.Layout.Idea == "" || cfg.Layout.Decode == "" {
 		return Result{}, fmt.Errorf("project: write: %w", ErrUsage)

@@ -23,10 +23,4 @@ type Result struct {
 	RunConfig string
 }
 
-// Writer writes a minimal IntelliJ project under layout.Idea.
-// Temporary: move to the consumer when cli attach --studio lands.
-type Writer interface {
-	Write(cfg Config) (Result, error)
-}
-
 type FS struct{}

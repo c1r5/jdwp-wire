@@ -4,11 +4,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/c1r5/jdwp-wire/internal/device"
 	"github.com/c1r5/jdwp-wire/internal/jdwp"
+	"github.com/c1r5/jdwp-wire/internal/project"
 )
 
 func TestAttachHuman(t *testing.T) {
@@ -46,7 +49,7 @@ func TestAttachHuman(t *testing.T) {
 		"[ok] forward: tcp:8700 -> jdwp:4242",
 		"[ok] probe: 127.0.0.1:8700",
 		"[skip] patch: use jdt patch and jdt install first",
-		"[skip] studio: not wired",
+		"[skip] studio: pass --studio",
 		"attach: localhost:8700",
 	} {
 		if !strings.Contains(out, want) {
@@ -109,6 +112,9 @@ func TestAttachJSON(t *testing.T) {
 	if got.Package != "com.alvo" || got.Serial != "emulator-5554" || got.PID != 4242 || got.Port != 9000 || got.Activity != "com.alvo/.MainActivity" {
 		t.Fatalf("%+v", got)
 	}
+	if strings.Contains(stdout.String(), "studio") {
+		t.Fatalf("studio field without flag:\n%s", stdout.String())
+	}
 }
 
 func TestAttachNoDevice(t *testing.T) {
@@ -158,7 +164,7 @@ func TestAttachToolMissing(t *testing.T) {
 	}
 }
 
-func TestAttachStudioFlagAccepted(t *testing.T) {
+func TestAttachStudioOffDoesNotWrite(t *testing.T) {
 	t.Parallel()
 	var stdout, stderr bytes.Buffer
 	code := run(runConfig{
@@ -166,12 +172,178 @@ func TestAttachStudioFlagAccepted(t *testing.T) {
 		stderr: &stderr,
 		device: testDevice(),
 		jdwp: &jdwp.Fake{AttachFn: func(_ context.Context, serial, pkg string, port int) (jdwp.Session, error) {
-			return jdwp.Session{Package: pkg, Serial: serial, PID: 1, Port: port, Activity: "x/.Y"}, nil
+			return jdwp.Session{Package: pkg, Serial: serial, PID: 1, Port: port}, nil
+		}},
+		projects: &project.Fake{WriteFn: func(project.Config) (project.Result, error) {
+			t.Fatal("writer called")
+			return project.Result{}, nil
+		}},
+		args: []string{"attach", "com.alvo"},
+	})
+	if code != ExitOK {
+		t.Fatalf("exit %d stderr=%q", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "[skip] studio: pass --studio") {
+		t.Fatalf("stdout=%q", stdout.String())
+	}
+}
+
+func TestAttachStudioWrites(t *testing.T) {
+	t.Parallel()
+	cwd := t.TempDir()
+	decode := filepath.Join(cwd, ".jdt", "com.alvo", "decode")
+	if err := os.MkdirAll(decode, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(decode, "AndroidManifest.xml"), []byte("<manifest/>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	code := run(runConfig{
+		stdout: &stdout,
+		stderr: &stderr,
+		cwd:    cwd,
+		device: testDevice(),
+		jdwp: &jdwp.Fake{AttachFn: func(_ context.Context, serial, pkg string, port int) (jdwp.Session, error) {
+			return jdwp.Session{Package: pkg, Serial: serial, PID: 1, Port: port, Activity: "com.alvo/.Main"}, nil
+		}},
+		args: []string{"attach", "com.alvo", "--studio", "--port", "9000"},
+	})
+	if code != ExitOK {
+		t.Fatalf("exit %d stderr=%q", code, stderr.String())
+	}
+	idea := filepath.Join(cwd, ".jdt", "com.alvo", "idea")
+	if !strings.Contains(stdout.String(), "[ok] studio: "+idea+"\n") {
+		t.Fatalf("stdout=%q", stdout.String())
+	}
+	for _, name := range []string{
+		"decode.iml",
+		filepath.Join(".idea", "misc.xml"),
+		filepath.Join(".idea", "modules.xml"),
+		filepath.Join(".idea", "runConfigurations", "Remote_Debug.xml"),
+	} {
+		if _, err := os.Stat(filepath.Join(idea, name)); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestAttachStudioNoDecode(t *testing.T) {
+	t.Parallel()
+	cwd := t.TempDir()
+	var stdout, stderr bytes.Buffer
+	code := run(runConfig{
+		stdout: &stdout,
+		stderr: &stderr,
+		cwd:    cwd,
+		device: testDevice(),
+		jdwp: &jdwp.Fake{AttachFn: func(_ context.Context, serial, pkg string, port int) (jdwp.Session, error) {
+			return jdwp.Session{Package: pkg, Serial: serial, PID: 1, Port: port}, nil
 		}},
 		args: []string{"attach", "com.alvo", "--studio"},
 	})
 	if code != ExitOK {
 		t.Fatalf("exit %d stderr=%q", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "[skip] studio: no decode") {
+		t.Fatalf("stdout=%q", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "attach: localhost:8700") {
+		t.Fatalf("stdout=%q", stdout.String())
+	}
+	if _, err := os.Stat(filepath.Join(cwd, ".jdt", "com.alvo", "idea", "decode.iml")); !os.IsNotExist(err) {
+		t.Fatalf("idea file err=%v", err)
+	}
+}
+
+func TestAttachStudioJSON(t *testing.T) {
+	t.Parallel()
+	cwd := t.TempDir()
+	decode := filepath.Join(cwd, ".jdt", "com.alvo", "decode")
+	if err := os.MkdirAll(decode, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(decode, "AndroidManifest.xml"), []byte("<manifest/>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	code := run(runConfig{
+		stdout: &stdout,
+		stderr: &stderr,
+		cwd:    cwd,
+		device: testDevice(),
+		jdwp: &jdwp.Fake{AttachFn: func(_ context.Context, serial, pkg string, port int) (jdwp.Session, error) {
+			return jdwp.Session{Package: pkg, Serial: serial, PID: 4, Port: port}, nil
+		}},
+		args: []string{"attach", "com.alvo", "--studio", "--json"},
+	})
+	if code != ExitOK {
+		t.Fatalf("exit %d stderr=%q", code, stderr.String())
+	}
+	var got struct {
+		Port   int `json:"port"`
+		Studio struct {
+			Dir     string `json:"dir"`
+			Skipped bool   `json:"skipped"`
+			Reason  string `json:"reason"`
+		} `json:"studio"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	idea := filepath.Join(cwd, ".jdt", "com.alvo", "idea")
+	if got.Port != 8700 || got.Studio.Skipped || got.Studio.Reason != "" || got.Studio.Dir != idea {
+		t.Fatalf("%+v", got)
+	}
+}
+
+func TestAttachStudioJSONNoDecode(t *testing.T) {
+	t.Parallel()
+	var stdout, stderr bytes.Buffer
+	code := run(runConfig{
+		stdout: &stdout,
+		stderr: &stderr,
+		cwd:    t.TempDir(),
+		device: testDevice(),
+		jdwp: &jdwp.Fake{AttachFn: func(_ context.Context, serial, pkg string, port int) (jdwp.Session, error) {
+			return jdwp.Session{Package: pkg, Serial: serial, PID: 4, Port: port}, nil
+		}},
+		args: []string{"attach", "com.alvo", "--studio", "--json"},
+	})
+	if code != ExitOK {
+		t.Fatalf("exit %d stderr=%q", code, stderr.String())
+	}
+	var got struct {
+		Studio struct {
+			Dir     string `json:"dir"`
+			Skipped bool   `json:"skipped"`
+			Reason  string `json:"reason"`
+		} `json:"studio"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if !got.Studio.Skipped || got.Studio.Reason != "no decode" || got.Studio.Dir != "" {
+		t.Fatalf("%+v", got)
+	}
+}
+
+func TestAttachStudioBadPackage(t *testing.T) {
+	t.Parallel()
+	var stdout, stderr bytes.Buffer
+	code := run(runConfig{
+		stdout: &stdout,
+		stderr: &stderr,
+		cwd:    t.TempDir(),
+		device: testDevice(),
+		jdwp: &jdwp.Fake{AttachFn: func(context.Context, string, string, int) (jdwp.Session, error) {
+			t.Fatal("attach called")
+			return jdwp.Session{}, nil
+		}},
+		args: []string{"attach", "com.alvo/extra", "--studio"},
+	})
+	if code != ExitUsage {
+		t.Fatalf("exit %d want %d stderr=%q", code, ExitUsage, stderr.String())
 	}
 }
 
