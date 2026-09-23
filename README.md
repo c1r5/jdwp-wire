@@ -7,7 +7,8 @@ This is not MobSF. It is not Frida-first. The main path is **smali/Java + JVM de
 Status: **MVP in progress**. Wired so far: `jdt devices`, `jdt pull`, `jdt patch`, `jdt install`, `jdt attach`, `jdt reset`. `--studio` project gen is not wired.
 
 ```
-go build -o jdt ./cmd/jdt
+go build -o jdt .
+go install .          # binário GOBIN: jdwp-wire (module path)
 ./jdt --help
 ./jdt devices
 ./jdt devices --json

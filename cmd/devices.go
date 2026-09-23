@@ -1,4 +1,4 @@
-package cli
+package cmd
 
 import (
 	"context"
@@ -8,6 +8,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/c1r5/jdwp-wire/internal/device"
+	"github.com/c1r5/jdwp-wire/internal/devices"
 	"github.com/spf13/cobra"
 )
 
@@ -16,21 +17,21 @@ func newDevicesCmd(cfg runConfig) *cobra.Command {
 		Use:   "devices",
 		Short: "List connected Android devices",
 		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			ctx, cancel := context.WithTimeout(cmd.Context(), cfg.timeout)
+		RunE: func(c *cobra.Command, _ []string) error {
+			ctx, cancel := context.WithTimeout(c.Context(), cfg.timeout)
 			defer cancel()
-			devs, err := cfg.device.List(ctx)
+			devs, err := devices.List(ctx, cfg.device)
 			if err != nil {
 				return err
 			}
-			asJSON, err := cmd.Flags().GetBool("json")
+			asJSON, err := c.Flags().GetBool("json")
 			if err != nil {
 				return err
 			}
 			if asJSON {
-				return writeDevicesJSON(cmd.OutOrStdout(), devs)
+				return writeDevicesJSON(c.OutOrStdout(), devs)
 			}
-			return writeDevicesTable(cmd.OutOrStdout(), devs)
+			return writeDevicesTable(c.OutOrStdout(), devs)
 		},
 	}
 }

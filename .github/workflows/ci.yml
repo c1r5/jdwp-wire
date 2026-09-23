@@ -27,4 +27,4 @@ jobs:
           version: v2.4.0
 
       - name: go build
-        run: go build -o /tmp/jdt ./cmd/jdt
+        run: go build -o /tmp/jdt .

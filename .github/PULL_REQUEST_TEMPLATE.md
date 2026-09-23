@@ -9,7 +9,7 @@ Closes #
 ## Como testar
 
 - `go test ./...`
-- `go build ./cmd/jdt`
+- `go build -o jdt .`
 
 ## Risco
 
