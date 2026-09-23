@@ -79,7 +79,7 @@ Atalho do dia a dia (MVP):
 jdt attach com.alvo --port 8700 --studio
 ```
 
-O pipeline do attach começa no decode e termina no install. Etapa já feita é skip só dela: árvore apktool existente não volta a puxar; manifest já debuggable ou com NSC de CA do usuário não repete essa parte do patch. O install e o resto correm na mesma. `android run --debug` entra nesse install quando a CLI 1.0 está no PATH. Sem a CLI, `adb install` e `am`.
+O pipeline do attach começa no decode e termina no install, e em seguida faz `adb -s <serial> forward tcp:PORT jdwp:PID` só se esse serial ainda estiver ligado. Etapa já feita é skip só dela: árvore apktool existente não volta a puxar; manifest já debuggable ou com NSC de CA do usuário não repete essa parte do patch. O install e o resto correm na mesma. `android run --debug` entra nesse install quando a CLI 1.0 está no PATH. Sem a CLI, `adb install` e `am`. O debugger no host liga em `localhost:PORT`; o `forward` é o túnel USB (ou o transporte adb já aberto) até o processo no device.
 
 ---
 

@@ -72,6 +72,7 @@ type Result struct {
 	Patch      patch.Result
 	Signed     string
 	Installed  bool
+	Device     device.Device
 }
 
 type repack struct {
@@ -102,8 +103,14 @@ func Run(ctx context.Context, dev device.Client, client jdwp.Client, opt Options
 	if err != nil {
 		return Result{}, err
 	}
+	// Install can take long enough for the cable to drop. Forward only if this
+	// serial is still the connected device.
+	live, err := dev.Resolve(ctx, d.Serial)
+	if err != nil {
+		return Result{}, err
+	}
 
-	sess, launch, installed, err := start(ctx, client, opt, d.Serial, &packed)
+	sess, launch, installed, err := start(ctx, client, opt, live.Serial, &packed)
 	if err != nil {
 		return Result{}, err
 	}
@@ -116,6 +123,7 @@ func Run(ctx context.Context, dev device.Client, client jdwp.Client, opt Options
 		PullAPK:    packed.pull,
 		DecodeDir:  packed.decode,
 		Patch:      packed.patch,
+		Device:     live,
 	}
 	if len(packed.apks) > 0 {
 		res.Signed = packed.apks[0]

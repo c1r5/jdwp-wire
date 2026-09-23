@@ -349,6 +349,49 @@ func TestRunMissingPackage(t *testing.T) {
 	}
 }
 
+type dropDev struct {
+	*device.Fake
+	n     int
+	limit int
+}
+
+func (d *dropDev) Resolve(ctx context.Context, serial string) (device.Device, error) {
+	d.n++
+	if d.n > d.limit {
+		return device.Device{}, fmt.Errorf("device: resolve: %w", device.ErrNoDevice)
+	}
+	return d.Fake.Resolve(ctx, serial)
+}
+
+func TestRunNoForwardWhenDeviceLeaves(t *testing.T) {
+	t.Parallel()
+	base := &device.Fake{Devices: []device.Device{{
+		Serial: "emulator-5554",
+		State:  device.StateDevice,
+		Kind:   device.KindUSB,
+		Model:  "phone",
+	}}}
+	_, err := Run(context.Background(), &dropDev{Fake: base, limit: 3}, &jdwp.Fake{
+		AttachFn: func(context.Context, string, string, int) (jdwp.Session, error) {
+			t.Fatal("forwarded after the device left")
+			return jdwp.Session{}, nil
+		},
+		BindFn: func(context.Context, string, string, int) (jdwp.Session, error) {
+			t.Fatal("forwarded after the device left")
+			return jdwp.Session{}, nil
+		},
+	}, Options{
+		Package: "com.alvo",
+		Port:    8700,
+		CWD:     t.TempDir(),
+		APK:     adbTools(t),
+		Patch:   appliedPatch(),
+	})
+	if !errors.Is(err, device.ErrNoDevice) {
+		t.Fatalf("err=%v", err)
+	}
+}
+
 func TestRunExistingDecodeSkipsPullAndStillInstalls(t *testing.T) {
 	t.Parallel()
 	cwd := t.TempDir()

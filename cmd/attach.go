@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/c1r5/jdwp-wire/internal/attach"
+	"github.com/c1r5/jdwp-wire/internal/device"
 	"github.com/c1r5/jdwp-wire/internal/project"
 	"github.com/spf13/cobra"
 )
@@ -21,7 +23,7 @@ func newAttachCmd(cfg runConfig) *cobra.Command {
 		Short: "Decode, patch, install, and forward JDWP for an installed package",
 		Long: `Attach a JDWP session for an installed package.
 
-The pipeline always starts with pull and decode and ends with install. A step that is already done is skipped on its own: an existing apktool tree skips decode, and a manifest that is already debuggable or already trusts user CAs skips that part of the patch. Later steps still run.
+The pipeline always starts with pull and decode and ends with install, then adb forward on the device that is still connected. A step that is already done is skipped on its own: an existing apktool tree skips decode, and a manifest that is already debuggable or already trusts user CAs skips that part of the patch. Later steps still run. If that serial is gone after install, forward does not run.
 
 Install replaces the installed app with a debug build signed by jdt. A signature mismatch uninstalls the package first, which clears its data. When the official Android CLI is on PATH, install and launch use android run --debug. Otherwise adb install and am set-debug-app are used.
 
@@ -70,6 +72,14 @@ Install replaces the installed app with a debug build signed by jdt. A signature
 	c.Flags().Int("port", 8700, "local TCP port to forward")
 	c.Flags().Bool("studio", false, "write .jdt/<pkg>/idea for Android Studio (does not launch the IDE)")
 	return c
+}
+
+func formatDevice(d device.Device) string {
+	parts := []string{string(d.Kind), d.Serial}
+	if d.Model != "" {
+		parts = append(parts, d.Model)
+	}
+	return strings.Join(parts, " ")
 }
 
 func writeAttachHuman(w io.Writer, res attach.Result) error {
@@ -124,7 +134,10 @@ func writeAttachHuman(w io.Writer, res attach.Result) error {
 	if _, err := fmt.Fprintf(w, "[ok] jdwp: pid %d\n", sess.PID); err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintf(w, "[ok] forward: tcp:%d -> jdwp:%d\n", sess.Port, sess.PID); err != nil {
+	if _, err := fmt.Fprintf(w, "[ok] device: %s\n", formatDevice(res.Device)); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(w, "[ok] forward: adb -s %s tcp:%d -> jdwp:%d\n", sess.Serial, sess.Port, sess.PID); err != nil {
 		return err
 	}
 	if _, err := fmt.Fprintf(w, "[ok] probe: 127.0.0.1:%d\n", sess.Port); err != nil {
