@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/c1r5/jdwp-wire/internal/androidcli"
 	"github.com/c1r5/jdwp-wire/internal/apk"
@@ -181,17 +182,39 @@ func start(ctx context.Context, client jdwp.Client, opt Options, serial string, 
 		return jdwp.Session{}, "", false, err
 	}
 	if ok {
-		if err := opt.Android.RunDebug(ctx, serial, packed.apks); err != nil {
+		if err := deploy(ctx, opt, serial, packed.apks, true); err != nil {
 			return jdwp.Session{}, "", false, err
 		}
 		sess, err := client.Bind(ctx, serial, opt.Package, opt.Port)
 		return sess, LaunchAndroid, false, err
 	}
-	if err := opt.APK.Install(ctx, serial, packed.apks...); err != nil {
+	if err := deploy(ctx, opt, serial, packed.apks, false); err != nil {
 		return jdwp.Session{}, "", false, err
 	}
 	sess, err := client.Attach(ctx, serial, opt.Package, opt.Port)
 	return sess, LaunchADB, true, err
+}
+
+func deploy(ctx context.Context, opt Options, serial string, apks []string, useAndroid bool) error {
+	err := installOnce(ctx, opt, serial, apks, useAndroid)
+	if !signatureMismatch(err) {
+		return err
+	}
+	if err := opt.APK.Uninstall(ctx, serial, opt.Package); err != nil {
+		return err
+	}
+	return installOnce(ctx, opt, serial, apks, useAndroid)
+}
+
+func installOnce(ctx context.Context, opt Options, serial string, apks []string, useAndroid bool) error {
+	if useAndroid {
+		return opt.Android.RunDebug(ctx, serial, apks)
+	}
+	return opt.APK.Install(ctx, serial, apks...)
+}
+
+func signatureMismatch(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "INSTALL_FAILED_UPDATE_INCOMPATIBLE")
 }
 
 func androidAvailable(ctx context.Context, c androidcli.Client) (bool, error) {

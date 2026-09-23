@@ -21,7 +21,7 @@ func newAttachCmd(cfg runConfig) *cobra.Command {
 		Short: "Forward JDWP, repackaging the installed app when it is not debuggable",
 		Long: `Attach a JDWP session for an installed package.
 
-If the package is not debuggable, attach pulls it, sets android:debuggable and a user-CA network security config, re-signs, and reinstalls. That replaces the installed app. When the official Android CLI is on PATH, that install and launch use android run --debug. Otherwise adb install and am set-debug-app are used.
+If the package is not debuggable, attach pulls it, sets android:debuggable and a user-CA network security config, re-signs, and reinstalls. That replaces the installed app. A signature mismatch uninstalls the package first, which clears its data. When the official Android CLI is on PATH, that install and launch use android run --debug. Otherwise adb install and am set-debug-app are used.
 
 An already debuggable package is not pulled or patched. Launch stays on adb.
 

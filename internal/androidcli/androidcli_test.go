@@ -101,6 +101,20 @@ func TestRunDebugExit(t *testing.T) {
 	}
 }
 
+func TestRunDebugInstallFailedExitZero(t *testing.T) {
+	t.Parallel()
+	c := &CLI{
+		r: &execx.Fake{RunFn: func(context.Context, string, ...string) (execx.Result, error) {
+			return execx.Result{Stdout: "Installation failed. Code: INSTALL_FAILED_UPDATE_INCOMPATIBLE."}, nil
+		}},
+		look: func(string) (string, error) { return "android", nil },
+	}
+	err := c.RunDebug(context.Background(), "emu", []string{"a.apk"})
+	if err == nil || !strings.Contains(err.Error(), "INSTALL_FAILED_UPDATE_INCOMPATIBLE") {
+		t.Fatalf("err=%v", err)
+	}
+}
+
 func TestRunDebugMissing(t *testing.T) {
 	t.Parallel()
 	c := &CLI{

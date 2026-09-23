@@ -231,6 +231,53 @@ func TestRunRepackageAndroid(t *testing.T) {
 	}
 }
 
+func TestRunRepackageUninstallsOnSignatureMismatch(t *testing.T) {
+	t.Parallel()
+	var runs int
+	var uninstalled bool
+	tools := repackAPK(t)
+	res, err := Run(context.Background(), releaseDevice(), &jdwp.Fake{
+		BindFn: func(_ context.Context, serial, pkg string, port int) (jdwp.Session, error) {
+			return jdwp.Session{Package: pkg, Serial: serial, PID: 3, Port: port}, nil
+		},
+	}, Options{
+		Package: "com.alvo",
+		Port:    8700,
+		CWD:     t.TempDir(),
+		APK: &apk.Fake{
+			PullFn:    tools.PullFn,
+			DecodeFn:  tools.DecodeFn,
+			BuildFn:   tools.BuildFn,
+			SignFn:    tools.SignFn,
+			InstallFn: tools.InstallFn,
+			UninstallFn: func(_ context.Context, serial, pkg string) error {
+				if serial != "emulator-5554" || pkg != "com.alvo" {
+					t.Fatalf("uninstall %s %s", serial, pkg)
+				}
+				uninstalled = true
+				return nil
+			},
+		},
+		Patch: appliedPatch(),
+		Android: &androidcli.Fake{
+			AvailableFn: func(context.Context) (bool, error) { return true, nil },
+			RunDebugFn: func(context.Context, string, []string) error {
+				runs++
+				if runs == 1 {
+					return errors.New("androidcli: run: INSTALL_FAILED_UPDATE_INCOMPATIBLE")
+				}
+				return nil
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !uninstalled || runs != 2 || res.Launch != LaunchAndroid || res.Session.PID != 3 {
+		t.Fatalf("runs=%d uninstalled=%v res=%+v", runs, uninstalled, res)
+	}
+}
+
 func TestRunRepackageFallsBackToADB(t *testing.T) {
 	t.Parallel()
 	var installed []string

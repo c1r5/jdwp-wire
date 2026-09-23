@@ -130,7 +130,7 @@ Encaixe útil:
 | `android layout` / `screen capture` / `screen resolve` | [v1+] dirigir UI até o sink, sem Appium |
 | `android init` + skills | se um agente for orquestrar o `jdt` |
 
-MVP: se `android` for a CLI 1.0 (`run --apks` / `--debug`), `jdt attach` usa `android run --debug --apks=... --install-options=-r,-d` depois do patch. O binário antigo do SDK conta como ausente. Sem a CLI, fallback `adb install` + `am set-debug-app -w`. App já debuggable não patcheia e o launch fica no fallback. Probe da porta nos dois caminhos. Não tornar Android CLI dependência dura.
+MVP: se `android` for a CLI 1.0 (`run --apks` / `--debug`), `jdt attach` usa `android run --debug --apks=... --install-options=-r,-d` depois do patch. O binário antigo do SDK conta como ausente. Exit 0 com `INSTALL_FAILED` no texto é erro. Sem a CLI, fallback `adb install` + `am set-debug-app -w`. Assinatura diferente (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`) faz `adb uninstall` e tenta de novo. App já debuggable não patcheia e o launch fica no fallback. Probe da porta nos dois caminhos. Não tornar Android CLI dependência dura.
 
 Não usar no MVP: `android create`, `docs`, Journeys, skills. Isso é dev de app greenfield, não RE.
 

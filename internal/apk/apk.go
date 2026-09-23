@@ -35,6 +35,7 @@ type Client interface {
 	Build(ctx context.Context, decodedDir, outAPK string) (Artifact, error)
 	Sign(ctx context.Context, apkPath, keystore string) (Artifact, error)
 	Install(ctx context.Context, serial string, apks ...string) error
+	Uninstall(ctx context.Context, serial, pkg string) error
 }
 
 type Tools struct {

@@ -75,6 +75,9 @@ func (c *CLI) RunDebug(ctx context.Context, serial string, apks []string) error 
 	if err != nil {
 		return wrapRun(res.Stderr, err)
 	}
+	if text := res.Stdout + res.Stderr; strings.Contains(text, "INSTALL_FAILED") || strings.Contains(text, "Installation failed") {
+		return fmt.Errorf("androidcli: run: %w", &execx.ExitError{Name: "android", ExitCode: 1, Stderr: truncate(text, maxErrBody)})
+	}
 	return nil
 }
 
