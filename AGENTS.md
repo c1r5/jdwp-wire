@@ -63,7 +63,8 @@ Binário: `jdt`
 
 ```
 jdt devices
-jdt pull     <pkg|apk> [--decode]
+jdt apps
+jdt pull     <index|pkg|apk> [--decode]
 jdt patch    <decoded_dir|--apk>
 jdt install  <apk|decoded_dir|pkg>
 jdt attach   <pkg> [--port 8700] [--studio] [--no-patch]
@@ -86,7 +87,8 @@ Faz o máximo que o MVP cobrir e imprime o que falta (ex.: “app já debuggable
 
 | Módulo    | Papel                                      | MVP | v1 |
 |-----------|--------------------------------------------|-----|----|
-| `device`  | serial, root/userdebug, `pidof` estável    | sim | multi-device explícito |
+| `device`  | serial, root/userdebug, `pidof` estável, packages instalados | sim | multi-device explícito |
+| `apps`    | `jdt apps`: IDX/PID/nome/package; índice do `pull` | sim | label de `@string` |
 | `apk`     | pull, splits, apktool, sign                | pull + decode + sign + install-multiple (sem merge) | AAB |
 | `patch`   | `debuggable=true`, NSC user CA             | sim | extractNativeLibs, keep signature se possível |
 | `jdwp`    | set-debug-app, wait, forward, healthcheck  | sim | retry / process spawn vs attach |
@@ -153,6 +155,7 @@ Inclui:
 7. Módulo `project`: escreve o esqueleto IntelliJ em `.jdt/<pkg>/idea` (Remote Debug `localhost:PORT`, content root = decode já existente). O flag `--studio` no attach ainda não chama isto (skip até o wiring no `cmd`).
 8. `jdt targets --http`: grep/parse raso de OkHttp / Retrofit / `HttpURLConnection` no decode; imprime `classe#metodo`.
 9. Log em texto: cada passo, skip, e o one-liner de attach.
+10. `jdt apps`: packages instalados (PID se o processo existe). `jdt pull` aceita o IDX dessa lista, além de package ou APK local. O nome é o label não-localizado; label de resource fica pro package.
 
 Não inclui no MVP:
 
@@ -207,7 +210,7 @@ Ainda fora do v1 (backlog consciente):
 
 - Go 1.23+ CLI (`jdt`). Wrappers de `adb`, `apktool`, `apksigner`/`uber-apk-signer`, `jdb`. Sem daemon. Sem Python no core.
 - Android CLI (`android`) é opcional e detectada em runtime. Nunca assumir que o binário `android` é o SDK antigo (`android`/`sdkmanager` pre-studio).
-- Saída humana no TTY + `--json` nas queries (`targets`, `watch`).
+- Saída humana no TTY + `--json` nas queries (`apps`, `targets`, `watch`).
 - Workspace local `./.jdt/<package>/` (apk, decode, patched, idea, captures).
 - Patch é destrutivo no APK instalado (vira build debug assinado por nós). Deixar isso explícito no help.
 - Não mentir compatibilidade: release Play com Integrity / anti-tamper pode quebrar no patch. MVP documenta o fail, não contorna.

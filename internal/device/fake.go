@@ -8,7 +8,9 @@ import (
 type Fake struct {
 	Devices []Device
 	Procs   map[string][]Process
+	Apps    []App
 	ListErr error
+	AppsErr error
 }
 
 func (f *Fake) List(context.Context) ([]Device, error) {
@@ -30,6 +32,18 @@ func (f *Fake) Resolve(ctx context.Context, serial string) (Device, error) {
 		return Device{}, fmt.Errorf("device: resolve: %w", err)
 	}
 	return d, nil
+}
+
+func (f *Fake) ListApps(_ context.Context, serial string) ([]App, error) {
+	if serial == "" {
+		return nil, fmt.Errorf("device: apps: %w", ErrUsage)
+	}
+	if f.AppsErr != nil {
+		return nil, fmt.Errorf("device: apps: %w", f.AppsErr)
+	}
+	out := make([]App, len(f.Apps))
+	copy(out, f.Apps)
+	return out, nil
 }
 
 func (f *Fake) Pidof(_ context.Context, serial, pkg string) ([]Process, error) {

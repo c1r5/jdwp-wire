@@ -79,6 +79,16 @@ func parsePidof(stdout string) []int {
 
 func parsePS(stdout, pkg string) []Process {
 	var out []Process
+	for _, p := range parsePSAll(stdout) {
+		if p.Package == pkg || strings.HasPrefix(p.Package, pkg+":") {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+func parsePSAll(stdout string) []Process {
+	var out []Process
 	pidCol, nameCol := -1, -1
 	headerSeen := false
 	for _, line := range strings.Split(stdout, "\n") {
@@ -105,11 +115,115 @@ func parsePS(stdout, pkg string) []Process {
 		if pid <= 0 || name == "" {
 			continue
 		}
-		if name == pkg || strings.HasPrefix(name, pkg+":") {
-			out = append(out, Process{PID: pid, Package: name})
-		}
+		out = append(out, Process{PID: pid, Package: name})
 	}
 	return out
+}
+
+func parsePackageList(stdout string) []string {
+	seen := map[string]struct{}{}
+	var out []string
+	for _, line := range strings.Split(stdout, "\n") {
+		line = strings.TrimSpace(line)
+		pkg, ok := strings.CutPrefix(line, "package:")
+		if !ok {
+			continue
+		}
+		pkg = strings.TrimSpace(pkg)
+		if pkg == "" {
+			continue
+		}
+		if _, dup := seen[pkg]; dup {
+			continue
+		}
+		seen[pkg] = struct{}{}
+		out = append(out, pkg)
+	}
+	return out
+}
+
+func parseAppLabels(stdout string) map[string]string {
+	labels := map[string]string{}
+	current := ""
+	for _, line := range strings.Split(stdout, "\n") {
+		if strings.Contains(line, "Package [") {
+			current = ""
+			if pkg, ok := packageHeader(line); ok {
+				current = pkg
+			}
+			continue
+		}
+		if current == "" {
+			continue
+		}
+		if label, ok := labelOnLine(line); ok {
+			labels[current] = label
+		}
+	}
+	return labels
+}
+
+func packageHeader(line string) (string, bool) {
+	const mark = "Package ["
+	i := strings.Index(line, mark)
+	if i < 0 {
+		return "", false
+	}
+	rest := line[i+len(mark):]
+	j := strings.IndexByte(rest, ']')
+	if j <= 0 {
+		return "", false
+	}
+	pkg := strings.TrimSpace(rest[:j])
+	if pkg == "" || strings.ContainsAny(pkg, " \t") {
+		return "", false
+	}
+	return pkg, true
+}
+
+func labelOnLine(line string) (string, bool) {
+	const nonLoc = "nonLocalizedLabel="
+	if i := strings.Index(line, nonLoc); i >= 0 {
+		rest := strings.TrimSpace(line[i+len(nonLoc):])
+		if cut := strings.Index(rest, " icon="); cut >= 0 {
+			rest = strings.TrimSpace(rest[:cut])
+		}
+		if rest == "" || rest == "null" {
+			return "", false
+		}
+		return rest, true
+	}
+	const appLabel = "Application Label:"
+	if i := strings.Index(line, appLabel); i >= 0 {
+		rest := strings.TrimSpace(line[i+len(appLabel):])
+		if rest == "" || rest == "null" {
+			return "", false
+		}
+		return rest, true
+	}
+	return "", false
+}
+
+func pidForPackage(pkg string, procs []Process) int {
+	main, sub := 0, 0
+	for _, p := range procs {
+		if p.PID <= 0 {
+			continue
+		}
+		if p.Package == pkg {
+			if main == 0 || p.PID < main {
+				main = p.PID
+			}
+			continue
+		}
+		if strings.HasPrefix(p.Package, pkg+":") && (sub == 0 || p.PID < sub) {
+			sub = p.PID
+		}
+	}
+	if main != 0 {
+		return main
+	}
+	return sub
 }
 
 func pickPIDName(fields []string, pidCol, nameCol int) (int, string) {
