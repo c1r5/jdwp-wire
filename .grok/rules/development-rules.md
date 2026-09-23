@@ -41,7 +41,7 @@ Regras de forma:
 
 - `cmd/` não contém regra de negócio (só Cobra + apresentação).
 - Pacote novo só em `internal/<modulo>`. API pública do módulo = o que `cmd` e outros `internal` importam.
-- Dependência entre módulos é acíclica. Sentido permitido: `execx` ← `device`/`apk`/`androidcli` ← `jdwp`/`patch`/`project`/`targets` ← orch por comando ← `cmd` ← `main`. `logging` é folha: só `cmd` importa.
+- Dependência entre módulos é acíclica. Sentido permitido: `execx` ← `device`/`apk`/`androidcli` ← `jdwp`/`patch`/`project`/`targets` ← orch por comando ← `cmd` ← `main`. `logging` é folha: `cmd`, a orch e `jdwp` chamam o logger; só esse pacote importa a lib.
 - Sem estado global de ADB (lição do repo antigo).
 - Sem `init()`. `package main` só na raiz (`main.go`).
 - `internal/execx` é o único lugar que fala com o OS pra binário externo.

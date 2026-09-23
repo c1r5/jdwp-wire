@@ -155,7 +155,7 @@ Inclui:
 6. `jdt reset` (clear-debug-app + remove forward).
 7. Módulo `project`: escreve o esqueleto IntelliJ em `.jdt/<pkg>/idea` (Remote Debug `127.0.0.1:PORT`, content root = decode já existente). `jdt attach --studio` chama isto depois do forward. Sem decode, imprime skip e o attach segue.
 8. `jdt targets --http`: grep/parse raso de OkHttp / Retrofit / `HttpURLConnection` no decode; imprime `classe#metodo`.
-9. Log em texto via `internal/logging`: cada passo é `HH:MM:SS [ok|skip] [módulo] ação` (cor no TTY), e o one-liner de attach é `[ok] [attach] 127.0.0.1:PORT`.
+9. Log em texto via `internal/logging`: cada passo é `HH:MM:SS [ok|skip] [módulo] ação` (cor no TTY), escrito quando a etapa termina e antes da próxima chamada bloqueante. O one-liner de attach é `[ok] [attach] 127.0.0.1:PORT`.
 10. `jdt apps`: packages instalados (PID se o processo existe). `jdt pull` aceita o IDX dessa lista, além de package ou APK local. O nome é o label não-localizado; label de resource fica pro package.
 
 Não inclui no MVP:

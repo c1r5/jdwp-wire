@@ -5,11 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"strings"
 
 	"github.com/c1r5/jdwp-wire/internal/attach"
-	"github.com/c1r5/jdwp-wire/internal/device"
-	"github.com/c1r5/jdwp-wire/internal/logging"
 	"github.com/c1r5/jdwp-wire/internal/project"
 	"github.com/spf13/cobra"
 )
@@ -49,6 +46,10 @@ Install replaces the installed app with a debug build signed by jdt. A signature
 			if err != nil {
 				return err
 			}
+			lg := cfg.logger
+			if asJSON {
+				lg = nil
+			}
 			res, err := attach.Run(ctx, cfg.device, cfg.jdwp, attach.Options{
 				Serial:  serial,
 				Package: args[0],
@@ -59,6 +60,7 @@ Install replaces the installed app with a debug build signed by jdt. A signature
 				APK:     cfg.apk,
 				Patch:   cfg.patch,
 				Android: cfg.android,
+				Log:     lg,
 			})
 			if err != nil {
 				return err
@@ -66,64 +68,13 @@ Install replaces the installed app with a debug build signed by jdt. A signature
 			if asJSON {
 				return writeAttachJSON(c.OutOrStdout(), res)
 			}
-			return writeAttachHuman(cfg.logger, res)
+			return nil
 		},
 	}
 	c.Flags().StringP("serial", "s", "", "adb serial (required if multiple devices)")
 	c.Flags().Int("port", 8700, "local TCP port to forward")
 	c.Flags().Bool("studio", false, "write .jdt/<pkg>/idea for Android Studio (does not launch the IDE)")
 	return c
-}
-
-func formatDevice(d device.Device) string {
-	parts := []string{string(d.Kind), d.Serial}
-	if d.Model != "" {
-		parts = append(parts, d.Model)
-	}
-	return strings.Join(parts, " ")
-}
-
-func writeAttachHuman(lg *logging.Logger, res attach.Result) error {
-	if res.SkipDecode {
-		lg.Skip("pull", "decode already exists")
-		lg.Skip("decode", res.DecodeDir)
-	} else {
-		lg.OK("pull", res.PullAPK)
-		lg.OK("decode", res.DecodeDir)
-	}
-	if err := writePatchHuman(lg, res.Patch); err != nil {
-		return err
-	}
-	lg.OK("sign", res.Signed)
-	if res.Launch == attach.LaunchAndroid {
-		lg.OK("launch", "android run --debug")
-	} else {
-		lg.Skip("android", "cli unavailable")
-		lg.OK("install", res.Signed)
-	}
-	sess := res.Session
-	if res.Launch != attach.LaunchAndroid {
-		lg.OK("debug-app", sess.Package)
-		if sess.Activity != "" {
-			lg.OK("launch", sess.Activity)
-		} else {
-			lg.OK("launch", "monkey "+sess.Package)
-		}
-	}
-	lg.OK("jdwp", fmt.Sprintf("pid %d", sess.PID))
-	lg.OK("device", formatDevice(res.Device))
-	lg.OK("forward", fmt.Sprintf("adb -s %s tcp:%d -> jdwp:%d", sess.Serial, sess.Port, sess.PID))
-	lg.Skip("probe", "jdwp socket left for the debugger")
-	switch res.Studio {
-	case attach.StudioWritten:
-		lg.OK("studio", res.Project.Dir)
-	case attach.StudioNoDecode:
-		lg.Skip("studio", "no decode")
-	default:
-		lg.Skip("studio", "pass --studio")
-	}
-	lg.OK("attach", fmt.Sprintf("127.0.0.1:%d", sess.Port))
-	return nil
 }
 
 type studioJSON struct {

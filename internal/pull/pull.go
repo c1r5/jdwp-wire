@@ -9,6 +9,7 @@ import (
 	"github.com/c1r5/jdwp-wire/internal/apk"
 	"github.com/c1r5/jdwp-wire/internal/apps"
 	"github.com/c1r5/jdwp-wire/internal/device"
+	"github.com/c1r5/jdwp-wire/internal/logging"
 	"github.com/c1r5/jdwp-wire/internal/workspace"
 )
 
@@ -17,6 +18,8 @@ type Deps struct {
 	Device device.Client
 	APK    apk.Client
 	CWD    string
+	// Log is written as each step finishes. Nil stays quiet.
+	Log *logging.Logger
 }
 
 // Request is the parsed input for jdt pull.
@@ -39,6 +42,7 @@ func Run(ctx context.Context, deps Deps, req Request) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
+	logPull(deps.Log, art)
 	out := Result{Artifact: art}
 	if !req.Decode {
 		return out, nil
@@ -51,8 +55,16 @@ func Run(ctx context.Context, deps Deps, req Request) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
+	deps.Log.OK("decode", dec.Dir)
 	out.DecodeDir = dec.Dir
 	return out, nil
+}
+
+func logPull(lg *logging.Logger, art apk.Artifact) {
+	lg.OK("pull", art.Package+" → "+art.APK)
+	for _, s := range art.Splits {
+		lg.OK("pull", s)
+	}
 }
 
 func fetch(ctx context.Context, deps Deps, req Request) (apk.Artifact, error) {

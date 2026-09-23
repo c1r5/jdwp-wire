@@ -1,6 +1,7 @@
 package jdwp
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/c1r5/jdwp-wire/internal/device"
 	"github.com/c1r5/jdwp-wire/internal/execx"
+	"github.com/c1r5/jdwp-wire/internal/logging"
 )
 
 func listenLocal(t *testing.T) int {
@@ -138,6 +140,48 @@ func TestBindReadsStreamingJDWP(t *testing.T) {
 	}
 	if got.PID != 4242 || got.Port != port {
 		t.Fatalf("%+v", got)
+	}
+}
+
+func TestAttachLogsBeforeTheNextStep(t *testing.T) {
+	t.Parallel()
+	port := listenLocal(t)
+	var buf bytes.Buffer
+	lg := logging.New(&buf)
+	r := &execx.Fake{RunFn: func(_ context.Context, _ string, args ...string) (execx.Result, error) {
+		joined := strings.Join(args, " ")
+		switch {
+		case strings.Contains(joined, "resolve-activity"):
+			if !strings.Contains(buf.String(), "[ok] [debug-app] com.alvo") {
+				t.Fatalf("debug-app should be logged before launch, stdout=%q", buf.String())
+			}
+			return execx.Result{Stdout: "com.alvo/.MainActivity\n"}, nil
+		case strings.Contains(joined, "am start"):
+			if strings.Contains(buf.String(), "[ok] [jdwp]") {
+				t.Fatalf("pid logged before launch finished, stdout=%q", buf.String())
+			}
+			return execx.Result{}, nil
+		case len(args) >= 3 && args[2] == "jdwp":
+			if !strings.Contains(buf.String(), "[ok] [launch] com.alvo/.MainActivity") {
+				t.Fatalf("launch should be logged before jdwp wait, stdout=%q", buf.String())
+			}
+			return execx.Result{Stdout: "4242\n"}, nil
+		case strings.Contains(joined, "--list"):
+			return execx.Result{Stdout: "emu tcp:" + strconv.Itoa(port) + " jdwp:4242\n"}, nil
+		default:
+			return execx.Result{}, nil
+		}
+	}}
+	a := New(r, &device.Fake{Procs: map[string][]device.Process{
+		"com.alvo": {{PID: 4242, Package: "com.alvo"}},
+	}})
+	a.poll = 0
+	a.SetLog(lg)
+	if _, err := a.Attach(withTimeout(t), "emu", "com.alvo", port); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(buf.String(), "[ok] [jdwp] pid 4242") || !strings.Contains(buf.String(), "[skip] [probe]") {
+		t.Fatalf("stdout=%q", buf.String())
 	}
 }
 

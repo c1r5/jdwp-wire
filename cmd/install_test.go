@@ -250,6 +250,9 @@ func TestInstallEncodeFromDecodeDir(t *testing.T) {
 			},
 			SignFn: func(_ context.Context, apkPath, _ string) (apk.Artifact, error) {
 				steps = append(steps, "sign")
+				if !strings.Contains(stdout.String(), "[ok] [encode] "+wantAPK) {
+					t.Fatalf("encode should be logged before sign, stdout=%q", stdout.String())
+				}
 				if apkPath != wantAPK {
 					t.Fatalf("sign %s", apkPath)
 				}
@@ -257,6 +260,9 @@ func TestInstallEncodeFromDecodeDir(t *testing.T) {
 			},
 			InstallFn: func(_ context.Context, _ string, apks ...string) error {
 				steps = append(steps, "install")
+				if !strings.Contains(stdout.String(), "[ok] [sign] "+wantAPK) {
+					t.Fatalf("sign should be logged before install, stdout=%q", stdout.String())
+				}
 				if len(apks) != 1 || apks[0] != wantAPK {
 					t.Fatalf("install %v", apks)
 				}

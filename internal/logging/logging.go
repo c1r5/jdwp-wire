@@ -44,12 +44,20 @@ func New(w io.Writer) *Logger {
 }
 
 // OK records a finished step: HH:MM:SS [ok] [module] action.
+// A nil Logger discards the line so callers can run with logging off.
 func (l *Logger) OK(module, action string) {
+	if l == nil {
+		return
+	}
 	l.step(log.InfoLevel, module, action)
 }
 
 // Skip records a step that did not need to run: HH:MM:SS [skip] [module] action.
+// A nil Logger discards the line so callers can run with logging off.
 func (l *Logger) Skip(module, action string) {
+	if l == nil {
+		return
+	}
 	l.step(log.WarnLevel, module, action)
 }
 

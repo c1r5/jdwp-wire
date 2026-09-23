@@ -31,12 +31,24 @@ func newResetCmd(cfg runConfig) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			lg := cfg.logger
+			if asJSON {
+				lg = nil
+			}
+			armed := false
+			if s, ok := cfg.jdwp.(interface{ SetLog(*logging.Logger) }); ok {
+				s.SetLog(lg)
+				armed = lg != nil
+			}
 			res, err := reset.Run(ctx, cfg.device, cfg.jdwp, serial, args[0], port)
 			if err != nil {
 				return err
 			}
 			if asJSON {
 				return writeResetJSON(c.OutOrStdout(), res.Package, res.Serial, res.Port)
+			}
+			if armed {
+				return nil
 			}
 			return writeResetHuman(cfg.logger, res.Package, res.Port)
 		},

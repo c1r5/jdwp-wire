@@ -218,6 +218,9 @@ func TestPullDecode(t *testing.T) {
 				return apk.Artifact{Package: "com.alvo", APK: filepath.Join(layout.APK, "base.apk")}, nil
 			},
 			DecodeFn: func(_ context.Context, apkPath string, layout workspace.Layout) (apk.Decoded, error) {
+				if !strings.Contains(stdout.String(), "[ok] [pull] com.alvo") {
+					t.Fatalf("pull should be logged before decode, stdout=%q", stdout.String())
+				}
 				decodedFrom = apkPath
 				decodeDir = layout.Decode
 				return apk.Decoded{Package: "com.alvo", Dir: layout.Decode}, nil

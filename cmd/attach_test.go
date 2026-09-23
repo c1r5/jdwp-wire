@@ -95,7 +95,7 @@ func TestAttachHuman(t *testing.T) {
 	}
 	out := stdout.String()
 	for _, want := range []string{
-		"[ok] [pull] /apk/base.apk",
+		"[ok] [pull] com.alvo → /apk/base.apk",
 		"[ok] [decode] ",
 		"[skip] [patch] already debuggable",
 		"[skip] [patch] nsc already trusts user CA",
@@ -166,7 +166,7 @@ func TestAttachRepackageAndroid(t *testing.T) {
 	}
 	out := stdout.String()
 	for _, want := range []string{
-		"[ok] [pull] /apk/base.apk",
+		"[ok] [pull] com.alvo → /apk/base.apk",
 		"[ok] [patch] debuggable",
 		"[ok] [patch] nsc user CA",
 		"[ok] [launch] android run --debug",

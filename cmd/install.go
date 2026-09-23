@@ -7,7 +7,6 @@ import (
 	"io"
 
 	"github.com/c1r5/jdwp-wire/internal/install"
-	"github.com/c1r5/jdwp-wire/internal/logging"
 	"github.com/spf13/cobra"
 )
 
@@ -31,10 +30,15 @@ func newInstallCmd(cfg runConfig) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			lg := cfg.logger
+			if asJSON {
+				lg = nil
+			}
 			res, err := install.Run(ctx, install.Deps{
 				Device: cfg.device,
 				APK:    cfg.apk,
 				CWD:    cfg.cwd,
+				Log:    lg,
 			}, install.Request{
 				Target:  args[0],
 				Serial:  serial,
@@ -43,32 +47,15 @@ func newInstallCmd(cfg runConfig) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			apks := append([]string{res.APK}, res.Splits...)
 			if asJSON {
 				return writeInstallJSON(c.OutOrStdout(), res.APK, res.Splits, res.Serial)
 			}
-			return writeInstallHuman(cfg.logger, apks, res.Encoded)
+			return nil
 		},
 	}
 	c.Flags().StringP("serial", "s", "", "adb serial (required if multiple devices)")
 	c.Flags().String("package", "", "package name (required when installing a decode dir outside .jdt/<pkg>/decode)")
 	return c
-}
-
-func writeInstallHuman(lg *logging.Logger, apks []string, encoded bool) error {
-	if len(apks) == 0 {
-		return nil
-	}
-	if encoded {
-		lg.OK("encode", apks[0])
-	}
-	for _, p := range apks {
-		lg.OK("sign", p)
-	}
-	for _, p := range apks {
-		lg.OK("install", p)
-	}
-	return nil
 }
 
 type installJSON struct {

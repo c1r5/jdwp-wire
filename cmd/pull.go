@@ -7,7 +7,6 @@ import (
 	"io"
 
 	"github.com/c1r5/jdwp-wire/internal/apk"
-	"github.com/c1r5/jdwp-wire/internal/logging"
 	"github.com/c1r5/jdwp-wire/internal/pull"
 	"github.com/spf13/cobra"
 )
@@ -36,10 +35,15 @@ func newPullCmd(cfg runConfig) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			lg := cfg.logger
+			if asJSON {
+				lg = nil
+			}
 			res, err := pull.Run(ctx, pull.Deps{
 				Device: cfg.device,
 				APK:    cfg.apk,
 				CWD:    cfg.cwd,
+				Log:    lg,
 			}, pull.Request{
 				Target:  args[0],
 				Serial:  serial,
@@ -52,12 +56,6 @@ func newPullCmd(cfg runConfig) *cobra.Command {
 			if asJSON {
 				return writePullJSON(c.OutOrStdout(), res.Artifact, res.DecodeDir)
 			}
-			if err := writePullHuman(cfg.logger, res.Artifact); err != nil {
-				return err
-			}
-			if doDecode {
-				cfg.logger.OK("decode", res.DecodeDir)
-			}
 			return nil
 		},
 	}
@@ -65,14 +63,6 @@ func newPullCmd(cfg runConfig) *cobra.Command {
 	c.Flags().String("package", "", "package name (required when pulling a local APK file)")
 	c.Flags().Bool("decode", false, "apktool-decode the APK into .jdt/<pkg>/decode")
 	return c
-}
-
-func writePullHuman(lg *logging.Logger, art apk.Artifact) error {
-	lg.OK("pull", art.Package+" → "+art.APK)
-	for _, s := range art.Splits {
-		lg.OK("pull", s)
-	}
-	return nil
 }
 
 type pullJSON struct {
