@@ -7,9 +7,13 @@ import (
 	"io"
 
 	"github.com/c1r5/jdwp-wire/internal/attach"
-	"github.com/c1r5/jdwp-wire/internal/jdwp"
+	"github.com/c1r5/jdwp-wire/internal/project"
 	"github.com/spf13/cobra"
 )
+
+type projectWriter interface {
+	Write(cfg project.Config) (project.Result, error)
+}
 
 func newAttachCmd(cfg runConfig) *cobra.Command {
 	c := &cobra.Command{
@@ -27,27 +31,39 @@ func newAttachCmd(cfg runConfig) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			studio, err := c.Flags().GetBool("studio")
+			if err != nil {
+				return err
+			}
 			asJSON, err := c.Flags().GetBool("json")
 			if err != nil {
 				return err
 			}
-			sess, err := attach.Run(ctx, cfg.device, cfg.jdwp, serial, args[0], port)
+			res, err := attach.Run(ctx, cfg.device, cfg.jdwp, attach.Options{
+				Serial:  serial,
+				Package: args[0],
+				Port:    port,
+				CWD:     cfg.cwd,
+				Studio:  studio,
+				Writer:  cfg.projects,
+			})
 			if err != nil {
 				return err
 			}
 			if asJSON {
-				return writeAttachJSON(c.OutOrStdout(), sess)
+				return writeAttachJSON(c.OutOrStdout(), res)
 			}
-			return writeAttachHuman(c.OutOrStdout(), sess)
+			return writeAttachHuman(c.OutOrStdout(), res)
 		},
 	}
 	c.Flags().StringP("serial", "s", "", "adb serial (required if multiple devices)")
 	c.Flags().Int("port", 8700, "local TCP port to forward")
-	c.Flags().Bool("studio", false, "print Studio attach hint (project generation is not wired)")
+	c.Flags().Bool("studio", false, "write .jdt/<pkg>/idea for Android Studio (does not launch the IDE)")
 	return c
 }
 
-func writeAttachHuman(w io.Writer, sess jdwp.Session) error {
+func writeAttachHuman(w io.Writer, res attach.Result) error {
+	sess := res.Session
 	if _, err := fmt.Fprintf(w, "[ok] debug-app: %s\n", sess.Package); err != nil {
 		return err
 	}
@@ -72,29 +88,53 @@ func writeAttachHuman(w io.Writer, sess jdwp.Session) error {
 	if _, err := fmt.Fprintln(w, "[skip] patch: use jdt patch and jdt install first"); err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintln(w, "[skip] studio: not wired"); err != nil {
+	var studio string
+	switch res.Studio {
+	case attach.StudioWritten:
+		studio = fmt.Sprintf("[ok] studio: %s", res.Project.Dir)
+	case attach.StudioNoDecode:
+		studio = "[skip] studio: no decode"
+	default:
+		studio = "[skip] studio: pass --studio"
+	}
+	if _, err := fmt.Fprintln(w, studio); err != nil {
 		return err
 	}
 	_, err := fmt.Fprintf(w, "attach: localhost:%d\n", sess.Port)
 	return err
 }
 
-type attachJSON struct {
-	Package  string `json:"package"`
-	Serial   string `json:"serial"`
-	PID      int    `json:"pid"`
-	Port     int    `json:"port"`
-	Activity string `json:"activity"`
+type studioJSON struct {
+	Dir     string `json:"dir"`
+	Skipped bool   `json:"skipped"`
+	Reason  string `json:"reason,omitempty"`
 }
 
-func writeAttachJSON(w io.Writer, sess jdwp.Session) error {
-	b, err := json.Marshal(attachJSON{
+type attachJSON struct {
+	Package  string      `json:"package"`
+	Serial   string      `json:"serial"`
+	PID      int         `json:"pid"`
+	Port     int         `json:"port"`
+	Activity string      `json:"activity"`
+	Studio   *studioJSON `json:"studio,omitempty"`
+}
+
+func writeAttachJSON(w io.Writer, res attach.Result) error {
+	sess := res.Session
+	out := attachJSON{
 		Package:  sess.Package,
 		Serial:   sess.Serial,
 		PID:      sess.PID,
 		Port:     sess.Port,
 		Activity: sess.Activity,
-	})
+	}
+	switch res.Studio {
+	case attach.StudioWritten:
+		out.Studio = &studioJSON{Dir: res.Project.Dir}
+	case attach.StudioNoDecode:
+		out.Studio = &studioJSON{Skipped: true, Reason: "no decode"}
+	}
+	b, err := json.Marshal(out)
 	if err != nil {
 		return err
 	}

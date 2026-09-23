@@ -92,7 +92,7 @@ Faz o máximo que o MVP cobrir e imprime o que falta (ex.: “app já debuggable
 | `apk`     | pull, splits, apktool, sign                | pull + decode + sign + install-multiple (sem merge) | AAB |
 | `patch`   | `debuggable=true`, NSC user CA             | sim | extractNativeLibs, keep signature se possível |
 | `jdwp`    | set-debug-app, wait, forward, healthcheck  | sim | retry / process spawn vs attach |
-| `project` | esqueleto IntelliJ em `.jdt/<pkg>/idea` (content root = decode) + Remote JVM Debug `localhost:PORT` | sim (módulo; `--studio` no attach depois de jdwp na main) | JADX sources opcional |
+| `project` | esqueleto IntelliJ em `.jdt/<pkg>/idea` (content root = decode) + Remote JVM Debug `localhost:PORT` | sim (`attach --studio` escreve depois do forward) | JADX sources opcional |
 | `targets` | sinks HTTP/crypto no smali/java            | lista OkHttp/Retrofit/HttpURLConnection | Cipher / pinning classes |
 | `capture` | dump JDWP do frame → JSON/HAR              | não | `watch --dump-okhttp` |
 | `frida`   | companion unpin / hide-debugger            | não | `--unpin` opcional |
@@ -108,7 +108,7 @@ Frida não é o caminho principal. Entra só quando JDWP sozinho não segura (pi
 
 MVP: `.jdt/<pkg>/idea` com `decode.iml` + `.idea/{misc,modules}.xml` + `.idea/runConfigurations/Remote_Debug.xml`. O smali **não** se copia — o iml aponta `../decode`. Sem Gradle, sem plugin Android, sem escolher o JDK da máquina, sem instalar smalidea.
 
-Não há `jdt project`. O atalho `--studio` no attach é wiring do `cmd` (depois de `jdwp` na `main`); até lá o flag imprime skip. `project` não lança o IDE.
+Não há `jdt project`. `jdt attach --studio` chama `project.Write` depois do forward e imprime o path de `idea/`. Sem a flag, imprime skip. Sem decode (`AndroidManifest.xml`), imprime skip e o attach segue. `project` não lança o IDE.
 
 Patch destrutivo e Integrity continuam a ser problema de `patch`/`apk`, não deste módulo.
 
@@ -152,7 +152,7 @@ Inclui:
 4. Patch `android:debuggable="true"` no manifest + rebuild + sign debug + install (`-r` / `-d` se necessário).
 5. Launch debugável: `android run --debug --apks=...` se a CLI oficial estiver instalada; senão `am set-debug-app -w` + start + `forward tcp:PORT jdwp:PID`. Probe da porta nos dois caminhos.
 6. `jdt reset` (clear-debug-app + remove forward).
-7. Módulo `project`: escreve o esqueleto IntelliJ em `.jdt/<pkg>/idea` (Remote Debug `localhost:PORT`, content root = decode já existente). O flag `--studio` no attach ainda não chama isto (skip até o wiring no `cmd`).
+7. Módulo `project`: escreve o esqueleto IntelliJ em `.jdt/<pkg>/idea` (Remote Debug `localhost:PORT`, content root = decode já existente). `jdt attach --studio` chama isto depois do forward. Sem decode, imprime skip e o attach segue.
 8. `jdt targets --http`: grep/parse raso de OkHttp / Retrofit / `HttpURLConnection` no decode; imprime `classe#metodo`.
 9. Log em texto: cada passo, skip, e o one-liner de attach.
 10. `jdt apps`: packages instalados (PID se o processo existe). `jdt pull` aceita o IDX dessa lista, além de package ou APK local. O nome é o label não-localizado; label de resource fica pro package.
