@@ -79,7 +79,7 @@ Atalho do dia a dia (MVP):
 jdt attach com.alvo --port 8700 --studio
 ```
 
-Faz o pipeline quando o app instalado não é debuggable e imprime o skip quando já é (`[skip] patch: already debuggable`). `android run --debug` só entra depois desse repack, quando a CLI 1.0 está no PATH. App já debuggable segue em `adb` + `am`, porque não há APK recém-assinado para `--apks`.
+O pipeline do attach começa no decode e termina no install. Etapa já feita é skip só dela: árvore apktool existente não volta a puxar; manifest já debuggable ou com NSC de CA do usuário não repete essa parte do patch. O install e o resto correm na mesma. `android run --debug` entra nesse install quando a CLI 1.0 está no PATH. Sem a CLI, `adb install` e `am`.
 
 ---
 
@@ -130,7 +130,7 @@ Encaixe útil:
 | `android layout` / `screen capture` / `screen resolve` | [v1+] dirigir UI até o sink, sem Appium |
 | `android init` + skills | se um agente for orquestrar o `jdt` |
 
-MVP: se `android` for a CLI 1.0 (`run --apks` / `--debug`), `jdt attach` usa `android run --debug --apks=... --install-options=-r,-d` depois do patch. O binário antigo do SDK conta como ausente. Exit 0 com `INSTALL_FAILED` no texto é erro. Sem a CLI, fallback `adb install` + `am set-debug-app -w`. Assinatura diferente (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`) faz `adb uninstall` e tenta de novo. App já debuggable não patcheia e o launch fica no fallback. Probe da porta nos dois caminhos. Não tornar Android CLI dependência dura.
+MVP: se `android` for a CLI 1.0 (`run --apks` / `--debug`), `jdt attach` usa `android run --debug --apks=... --install-options=-r,-d` depois do patch. O binário antigo do SDK conta como ausente. Exit 0 com `INSTALL_FAILED` no texto é erro. Sem a CLI, fallback `adb install` + `am set-debug-app -w`. Assinatura diferente (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`) faz `adb uninstall` e tenta de novo. Probe da porta nos dois caminhos. Não tornar Android CLI dependência dura.
 
 Não usar no MVP: `android create`, `docs`, Journeys, skills. Isso é dev de app greenfield, não RE.
 
@@ -150,7 +150,7 @@ Inclui:
 2. Reescrita do attach sem estado global no ADB.
 3. `pull` do package instalado (base.apk no mínimo).
 4. Patch `android:debuggable="true"` no manifest + rebuild + sign debug + install (`-r` / `-d` se necessário).
-5. Launch debugável: depois do repack, `android run --debug --apks=...` se a CLI oficial 1.0 estiver instalada; senão `am set-debug-app -w` + start + `forward tcp:PORT jdwp:PID`. App já debuggable não repacka e usa o fallback. Probe da porta nos dois caminhos.
+5. Launch debugável: o attach faz decode, patch (skip do que já está feito) e install. `android run --debug --apks=...` se a CLI oficial 1.0 estiver instalada; senão `adb install` + `am set-debug-app -w` + `forward tcp:PORT jdwp:PID`. Probe da porta nos dois caminhos.
 6. `jdt reset` (clear-debug-app + remove forward).
 7. Módulo `project`: escreve o esqueleto IntelliJ em `.jdt/<pkg>/idea` (Remote Debug `localhost:PORT`, content root = decode já existente). `jdt attach --studio` chama isto depois do forward. Sem decode, imprime skip e o attach segue.
 8. `jdt targets --http`: grep/parse raso de OkHttp / Retrofit / `HttpURLConnection` no decode; imprime `classe#metodo`.

@@ -3,6 +3,7 @@ package attach
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -27,6 +28,13 @@ func testDevice() device.Client {
 	}
 }
 
+func adbTools(t *testing.T) *apk.Fake {
+	t.Helper()
+	tools := repackAPK(t)
+	tools.InstallFn = func(context.Context, string, ...string) error { return nil }
+	return tools
+}
+
 func TestRun(t *testing.T) {
 	t.Parallel()
 	called := false
@@ -35,6 +43,9 @@ func TestRun(t *testing.T) {
 	}}, Options{
 		Package: "com.alvo",
 		Port:    8700,
+		CWD:     t.TempDir(),
+		APK:     adbTools(t),
+		Patch:   appliedPatch(),
 		Writer: &project.Fake{WriteFn: func(project.Config) (project.Result, error) {
 			called = true
 			return project.Result{}, nil
@@ -68,6 +79,8 @@ func TestRunStudioWrites(t *testing.T) {
 		Package: "com.alvo",
 		Port:    9000,
 		CWD:     cwd,
+		APK:     adbTools(t),
+		Patch:   appliedPatch(),
 		Studio:  true,
 		Writer: &project.Fake{WriteFn: func(cfg project.Config) (project.Result, error) {
 			got = cfg
@@ -93,6 +106,8 @@ func TestRunStudioNoDecode(t *testing.T) {
 		Package: "com.alvo",
 		Port:    8700,
 		CWD:     t.TempDir(),
+		APK:     adbTools(t),
+		Patch:   appliedPatch(),
 		Studio:  true,
 		Writer: &project.Fake{WriteFn: func(project.Config) (project.Result, error) {
 			return project.Result{}, project.ErrNoDecode
@@ -114,6 +129,8 @@ func TestRunStudioWriteError(t *testing.T) {
 		Package: "com.alvo",
 		Port:    8700,
 		CWD:     t.TempDir(),
+		APK:     adbTools(t),
+		Patch:   appliedPatch(),
 		Studio:  true,
 		Writer: &project.Fake{WriteFn: func(project.Config) (project.Result, error) {
 			return project.Result{}, errors.New("disk")
@@ -317,15 +334,69 @@ func TestRunRepackageFallsBackToADB(t *testing.T) {
 
 func TestRunMissingPackage(t *testing.T) {
 	t.Parallel()
-	dev := releaseDevice()
-	dev.Missing = map[string]bool{"com.alvo": true}
-	_, err := Run(context.Background(), dev, &jdwp.Fake{
+	tools := adbTools(t)
+	tools.PullFn = func(context.Context, string, string, workspace.Layout) (apk.Artifact, error) {
+		return apk.Artifact{}, fmt.Errorf("apk: pull: %w", apk.ErrPackageNotFound)
+	}
+	_, err := Run(context.Background(), releaseDevice(), &jdwp.Fake{
 		AttachFn: func(context.Context, string, string, int) (jdwp.Session, error) {
 			t.Fatal("attach")
 			return jdwp.Session{}, nil
 		},
-	}, Options{Package: "com.alvo", Port: 8700, CWD: t.TempDir()})
-	if !errors.Is(err, device.ErrPackageNotFound) {
+	}, Options{Package: "com.alvo", Port: 8700, CWD: t.TempDir(), APK: tools, Patch: appliedPatch()})
+	if !errors.Is(err, apk.ErrPackageNotFound) {
 		t.Fatalf("err=%v", err)
+	}
+}
+
+func TestRunExistingDecodeSkipsPullAndStillInstalls(t *testing.T) {
+	t.Parallel()
+	cwd := t.TempDir()
+	layout, err := workspace.ForPackage(cwd, "com.alvo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(layout.Decode, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(layout.Decode, "AndroidManifest.xml"), []byte("<manifest/>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(layout.Decode, "apktool.yml"), []byte("version: 2\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tools := adbTools(t)
+	tools.PullFn = func(context.Context, string, string, workspace.Layout) (apk.Artifact, error) {
+		t.Fatal("pull")
+		return apk.Artifact{}, nil
+	}
+	var installed bool
+	tools.InstallFn = func(context.Context, string, ...string) error {
+		installed = true
+		return nil
+	}
+	res, err := Run(context.Background(), testDevice(), &jdwp.Fake{
+		AttachFn: func(_ context.Context, serial, pkg string, port int) (jdwp.Session, error) {
+			return jdwp.Session{Package: pkg, Serial: serial, PID: 5, Port: port}, nil
+		},
+	}, Options{
+		Package: "com.alvo",
+		Port:    8700,
+		CWD:     cwd,
+		APK:     tools,
+		Patch: &patch.Fake{ApplyFn: func(dir string) (patch.Result, error) {
+			return patch.Result{Dir: dir, Debuggable: patch.ActionSkipped, NSC: patch.ActionSkipped}, nil
+		}},
+		Android: &androidcli.Fake{},
+		Studio:  true,
+		Writer: &project.Fake{WriteFn: func(cfg project.Config) (project.Result, error) {
+			return project.Result{Dir: cfg.Layout.Idea}, nil
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.SkipDecode || !installed || res.Studio != StudioWritten || res.Patch.Debuggable != patch.ActionSkipped {
+		t.Fatalf("%+v installed=%v", res, installed)
 	}
 }

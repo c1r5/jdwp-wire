@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/c1r5/jdwp-wire/internal/androidcli"
@@ -64,6 +66,7 @@ type Result struct {
 	Project    project.Result
 	Repackaged bool
 	Launch     Launch
+	SkipDecode bool
 	PullAPK    string
 	DecodeDir  string
 	Patch      patch.Result
@@ -72,14 +75,16 @@ type Result struct {
 }
 
 type repack struct {
-	pull   string
-	decode string
-	patch  patch.Result
-	apks   []string
+	pull       string
+	decode     string
+	skipDecode bool
+	patch      patch.Result
+	apks       []string
 }
 
-// Run resolves the device, repackages when the app is not debuggable, forwards JDWP,
-// and with Studio writes the IntelliJ skeleton.
+// Run pulls and decodes, patches what is still missing, installs, forwards JDWP,
+// and with Studio writes the IntelliJ skeleton. A step that is already done is
+// skipped on its own; later steps still run.
 func Run(ctx context.Context, dev device.Client, client jdwp.Client, opt Options) (Result, error) {
 	layout, err := workspace.ForPackage(opt.CWD, opt.Package)
 	if err != nil {
@@ -93,37 +98,27 @@ func Run(ctx context.Context, dev device.Client, client jdwp.Client, opt Options
 	if err != nil {
 		return Result{}, err
 	}
-	debuggable, err := dev.Debuggable(ctx, d.Serial, opt.Package)
+	packed, err := prepare(ctx, dev, opt, d.Serial, layout)
 	if err != nil {
 		return Result{}, err
 	}
 
-	var packed *repack
-	if !debuggable {
-		got, err := repackage(ctx, dev, opt, d.Serial)
-		if err != nil {
-			return Result{}, err
-		}
-		packed = &got
-	}
-
-	sess, launch, installed, err := start(ctx, client, opt, d.Serial, packed)
+	sess, launch, installed, err := start(ctx, client, opt, d.Serial, &packed)
 	if err != nil {
 		return Result{}, err
 	}
 	res := Result{
-		Session:   sess,
-		Launch:    launch,
-		Installed: installed,
+		Session:    sess,
+		Launch:     launch,
+		Installed:  installed,
+		Repackaged: true,
+		SkipDecode: packed.skipDecode,
+		PullAPK:    packed.pull,
+		DecodeDir:  packed.decode,
+		Patch:      packed.patch,
 	}
-	if packed != nil {
-		res.Repackaged = true
-		res.PullAPK = packed.pull
-		res.DecodeDir = packed.decode
-		res.Patch = packed.patch
-		if len(packed.apks) > 0 {
-			res.Signed = packed.apks[0]
-		}
+	if len(packed.apks) > 0 {
+		res.Signed = packed.apks[0]
 	}
 	if !opt.Studio {
 		return res, nil
@@ -141,26 +136,35 @@ func Run(ctx context.Context, dev device.Client, client jdwp.Client, opt Options
 	return res, nil
 }
 
-func repackage(ctx context.Context, dev device.Client, opt Options, serial string) (repack, error) {
+func prepare(ctx context.Context, dev device.Client, opt Options, serial string, layout workspace.Layout) (repack, error) {
 	if opt.APK == nil || opt.Patch == nil {
-		return repack{}, fmt.Errorf("attach: repackage: apk and patch clients are required")
+		return repack{}, fmt.Errorf("attach: prepare: apk and patch clients are required")
 	}
-	pulled, err := pull.Run(ctx, pull.Deps{Device: dev, APK: opt.APK, CWD: opt.CWD}, pull.Request{
-		Target: opt.Package,
-		Serial: serial,
-		Decode: true,
-	})
-	if err != nil {
-		return repack{}, err
+	out := repack{decode: layout.Decode}
+	if decodeReady(layout.Decode) {
+		out.skipDecode = true
+		out.pull = filepath.Join(layout.APK, "base.apk")
+	} else {
+		pulled, err := pull.Run(ctx, pull.Deps{Device: dev, APK: opt.APK, CWD: opt.CWD}, pull.Request{
+			Target: opt.Package,
+			Serial: serial,
+			Decode: true,
+		})
+		if err != nil {
+			return repack{}, err
+		}
+		out.pull = pulled.Artifact.APK
+		out.decode = pulled.DecodeDir
 	}
 	patched, err := patchapply.Run(ctx, patchapply.Deps{APK: opt.APK, Patch: opt.Patch, CWD: opt.CWD}, patchapply.Request{
-		DecodeDir: pulled.DecodeDir,
+		DecodeDir: out.decode,
 	})
 	if err != nil {
 		return repack{}, err
 	}
+	out.patch = patched
 	signed, err := install.Run(ctx, install.Deps{Device: dev, APK: opt.APK, CWD: opt.CWD}, install.Request{
-		Target:   pulled.DecodeDir,
+		Target:   out.decode,
 		Serial:   serial,
 		Package:  opt.Package,
 		SignOnly: true,
@@ -168,15 +172,21 @@ func repackage(ctx context.Context, dev device.Client, opt Options, serial strin
 	if err != nil {
 		return repack{}, err
 	}
-	apks := append([]string{signed.APK}, signed.Splits...)
-	return repack{pull: pulled.Artifact.APK, decode: pulled.DecodeDir, patch: patched, apks: apks}, nil
+	out.apks = append([]string{signed.APK}, signed.Splits...)
+	return out, nil
+}
+
+func decodeReady(dir string) bool {
+	for _, name := range []string{"AndroidManifest.xml", "apktool.yml"} {
+		st, err := os.Stat(filepath.Join(dir, name))
+		if err != nil || st.IsDir() {
+			return false
+		}
+	}
+	return true
 }
 
 func start(ctx context.Context, client jdwp.Client, opt Options, serial string, packed *repack) (jdwp.Session, Launch, bool, error) {
-	if packed == nil {
-		sess, err := client.Attach(ctx, serial, opt.Package, opt.Port)
-		return sess, LaunchADB, false, err
-	}
 	ok, err := androidAvailable(ctx, opt.Android)
 	if err != nil {
 		return jdwp.Session{}, "", false, err

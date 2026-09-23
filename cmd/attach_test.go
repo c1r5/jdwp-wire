@@ -18,12 +18,60 @@ import (
 	"github.com/c1r5/jdwp-wire/internal/workspace"
 )
 
+func testAPK(t *testing.T) *apk.Fake {
+	t.Helper()
+	return &apk.Fake{
+		PullFn: func(_ context.Context, _, pkg string, _ workspace.Layout) (apk.Artifact, error) {
+			return apk.Artifact{Package: pkg, APK: "/apk/base.apk"}, nil
+		},
+		DecodeFn: func(_ context.Context, _ string, layout workspace.Layout) (apk.Decoded, error) {
+			if err := os.MkdirAll(layout.Decode, 0o755); err != nil {
+				return apk.Decoded{}, err
+			}
+			if err := os.WriteFile(filepath.Join(layout.Decode, "AndroidManifest.xml"), []byte("<manifest/>"), 0o644); err != nil {
+				return apk.Decoded{}, err
+			}
+			if err := os.WriteFile(filepath.Join(layout.Decode, "apktool.yml"), []byte("version: 2\n"), 0o644); err != nil {
+				return apk.Decoded{}, err
+			}
+			return apk.Decoded{Dir: layout.Decode, Package: "com.alvo"}, nil
+		},
+		BuildFn: func(_ context.Context, _, out string) (apk.Artifact, error) {
+			return apk.Artifact{APK: out}, nil
+		},
+		SignFn: func(_ context.Context, path, _ string) (apk.Artifact, error) {
+			return apk.Artifact{APK: path}, nil
+		},
+		InstallFn:   func(context.Context, string, ...string) error { return nil },
+		UninstallFn: func(context.Context, string, string) error { return nil },
+	}
+}
+
+func attachRun(t *testing.T, cfg runConfig) int {
+	t.Helper()
+	if cfg.cwd == "" {
+		cfg.cwd = t.TempDir()
+	}
+	if cfg.apk == nil {
+		cfg.apk = testAPK(t)
+	}
+	if cfg.patch == nil {
+		cfg.patch = &patch.Fake{ApplyFn: func(dir string) (patch.Result, error) {
+			return patch.Result{Dir: dir, Debuggable: patch.ActionSkipped, NSC: patch.ActionSkipped}, nil
+		}}
+	}
+	if cfg.android == nil {
+		cfg.android = &androidcli.Fake{}
+	}
+	return run(cfg)
+}
+
 func TestAttachHuman(t *testing.T) {
 	t.Parallel()
 	var gotSerial, gotPkg string
 	var gotPort int
 	var stdout, stderr bytes.Buffer
-	code := run(runConfig{
+	code := attachRun(t, runConfig{
 		stdout: &stdout,
 		stderr: &stderr,
 		device: testDevice(),
@@ -47,13 +95,18 @@ func TestAttachHuman(t *testing.T) {
 	}
 	out := stdout.String()
 	for _, want := range []string{
+		"[ok] pull: /apk/base.apk",
+		"[ok] decode:",
+		"[skip] patch: already debuggable",
+		"[skip] patch: nsc already trusts user CA",
+		"[ok] sign:",
+		"[skip] android: cli unavailable",
+		"[ok] install:",
 		"[ok] debug-app: com.alvo",
 		"[ok] launch: com.alvo/.MainActivity",
 		"[ok] jdwp: pid 4242",
 		"[ok] forward: tcp:8700 -> jdwp:4242",
 		"[ok] probe: 127.0.0.1:8700",
-		"[skip] patch: already debuggable",
-		"[skip] android: no patched apks",
 		"[skip] studio: pass --studio",
 		"attach: localhost:8700",
 	} {
@@ -67,7 +120,7 @@ func TestAttachRepackageAndroid(t *testing.T) {
 	t.Parallel()
 	cwd := t.TempDir()
 	var stdout, stderr bytes.Buffer
-	code := run(runConfig{
+	code := attachRun(t, runConfig{
 		stdout: &stdout,
 		stderr: &stderr,
 		cwd:    cwd,
@@ -131,7 +184,7 @@ func TestAttachRepackageAndroid(t *testing.T) {
 func TestAttachMonkeyLaunchLine(t *testing.T) {
 	t.Parallel()
 	var stdout, stderr bytes.Buffer
-	code := run(runConfig{
+	code := attachRun(t, runConfig{
 		stdout: &stdout,
 		stderr: &stderr,
 		device: testDevice(),
@@ -151,7 +204,7 @@ func TestAttachMonkeyLaunchLine(t *testing.T) {
 func TestAttachJSON(t *testing.T) {
 	t.Parallel()
 	var stdout, stderr bytes.Buffer
-	code := run(runConfig{
+	code := attachRun(t, runConfig{
 		stdout: &stdout,
 		stderr: &stderr,
 		device: testDevice(),
@@ -181,7 +234,7 @@ func TestAttachJSON(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
 		t.Fatal(err)
 	}
-	if got.Package != "com.alvo" || got.Serial != "emulator-5554" || got.PID != 4242 || got.Port != 9000 || got.Activity != "com.alvo/.MainActivity" || got.Repackaged || got.Launch != "adb" {
+	if got.Package != "com.alvo" || got.Serial != "emulator-5554" || got.PID != 4242 || got.Port != 9000 || got.Activity != "com.alvo/.MainActivity" || !got.Repackaged || got.Launch != "adb" {
 		t.Fatalf("%+v", got)
 	}
 	if strings.Contains(stdout.String(), "studio") {
@@ -192,7 +245,7 @@ func TestAttachJSON(t *testing.T) {
 func TestAttachNoDevice(t *testing.T) {
 	t.Parallel()
 	var stdout, stderr bytes.Buffer
-	code := run(runConfig{
+	code := attachRun(t, runConfig{
 		stdout: &stdout,
 		stderr: &stderr,
 		device: &device.Fake{},
@@ -207,7 +260,7 @@ func TestAttachNoDevice(t *testing.T) {
 func TestAttachNoArgs(t *testing.T) {
 	t.Parallel()
 	var stdout, stderr bytes.Buffer
-	code := run(runConfig{
+	code := attachRun(t, runConfig{
 		stdout: &stdout,
 		stderr: &stderr,
 		device: testDevice(),
@@ -222,7 +275,7 @@ func TestAttachNoArgs(t *testing.T) {
 func TestAttachToolMissing(t *testing.T) {
 	t.Parallel()
 	var stdout, stderr bytes.Buffer
-	code := run(runConfig{
+	code := attachRun(t, runConfig{
 		stdout: &stdout,
 		stderr: &stderr,
 		device: testDevice(),
@@ -239,7 +292,7 @@ func TestAttachToolMissing(t *testing.T) {
 func TestAttachStudioOffDoesNotWrite(t *testing.T) {
 	t.Parallel()
 	var stdout, stderr bytes.Buffer
-	code := run(runConfig{
+	code := attachRun(t, runConfig{
 		stdout: &stdout,
 		stderr: &stderr,
 		device: testDevice(),
@@ -271,7 +324,7 @@ func TestAttachStudioWrites(t *testing.T) {
 		t.Fatal(err)
 	}
 	var stdout, stderr bytes.Buffer
-	code := run(runConfig{
+	code := attachRun(t, runConfig{
 		stdout: &stdout,
 		stderr: &stderr,
 		cwd:    cwd,
@@ -304,7 +357,7 @@ func TestAttachStudioNoDecode(t *testing.T) {
 	t.Parallel()
 	cwd := t.TempDir()
 	var stdout, stderr bytes.Buffer
-	code := run(runConfig{
+	code := attachRun(t, runConfig{
 		stdout: &stdout,
 		stderr: &stderr,
 		cwd:    cwd,
@@ -317,14 +370,12 @@ func TestAttachStudioNoDecode(t *testing.T) {
 	if code != ExitOK {
 		t.Fatalf("exit %d stderr=%q", code, stderr.String())
 	}
-	if !strings.Contains(stdout.String(), "[skip] studio: no decode") {
+	idea := filepath.Join(cwd, ".jdt", "com.alvo", "idea")
+	if !strings.Contains(stdout.String(), "[ok] studio: "+idea+"\n") {
 		t.Fatalf("stdout=%q", stdout.String())
 	}
-	if !strings.Contains(stdout.String(), "attach: localhost:8700") {
-		t.Fatalf("stdout=%q", stdout.String())
-	}
-	if _, err := os.Stat(filepath.Join(cwd, ".jdt", "com.alvo", "idea", "decode.iml")); !os.IsNotExist(err) {
-		t.Fatalf("idea file err=%v", err)
+	if _, err := os.Stat(filepath.Join(idea, "decode.iml")); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -339,7 +390,7 @@ func TestAttachStudioJSON(t *testing.T) {
 		t.Fatal(err)
 	}
 	var stdout, stderr bytes.Buffer
-	code := run(runConfig{
+	code := attachRun(t, runConfig{
 		stdout: &stdout,
 		stderr: &stderr,
 		cwd:    cwd,
@@ -371,11 +422,12 @@ func TestAttachStudioJSON(t *testing.T) {
 
 func TestAttachStudioJSONNoDecode(t *testing.T) {
 	t.Parallel()
+	cwd := t.TempDir()
 	var stdout, stderr bytes.Buffer
-	code := run(runConfig{
+	code := attachRun(t, runConfig{
 		stdout: &stdout,
 		stderr: &stderr,
-		cwd:    t.TempDir(),
+		cwd:    cwd,
 		device: testDevice(),
 		jdwp: &jdwp.Fake{AttachFn: func(_ context.Context, serial, pkg string, port int) (jdwp.Session, error) {
 			return jdwp.Session{Package: pkg, Serial: serial, PID: 4, Port: port}, nil
@@ -395,7 +447,8 @@ func TestAttachStudioJSONNoDecode(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
 		t.Fatal(err)
 	}
-	if !got.Studio.Skipped || got.Studio.Reason != "no decode" || got.Studio.Dir != "" {
+	idea := filepath.Join(cwd, ".jdt", "com.alvo", "idea")
+	if got.Studio.Skipped || got.Studio.Reason != "" || got.Studio.Dir != idea {
 		t.Fatalf("%+v", got)
 	}
 }
@@ -403,7 +456,7 @@ func TestAttachStudioJSONNoDecode(t *testing.T) {
 func TestAttachStudioBadPackage(t *testing.T) {
 	t.Parallel()
 	var stdout, stderr bytes.Buffer
-	code := run(runConfig{
+	code := attachRun(t, runConfig{
 		stdout: &stdout,
 		stderr: &stderr,
 		cwd:    t.TempDir(),
@@ -424,7 +477,7 @@ func TestResetHuman(t *testing.T) {
 	var gotSerial, gotPkg string
 	var gotPort int
 	var stdout, stderr bytes.Buffer
-	code := run(runConfig{
+	code := attachRun(t, runConfig{
 		stdout: &stdout,
 		stderr: &stderr,
 		device: testDevice(),
@@ -452,7 +505,7 @@ func TestResetHuman(t *testing.T) {
 func TestResetJSON(t *testing.T) {
 	t.Parallel()
 	var stdout, stderr bytes.Buffer
-	code := run(runConfig{
+	code := attachRun(t, runConfig{
 		stdout: &stdout,
 		stderr: &stderr,
 		device: testDevice(),
@@ -480,7 +533,7 @@ func TestResetJSON(t *testing.T) {
 func TestResetNoArgs(t *testing.T) {
 	t.Parallel()
 	var stdout, stderr bytes.Buffer
-	code := run(runConfig{
+	code := attachRun(t, runConfig{
 		stdout: &stdout,
 		stderr: &stderr,
 		device: testDevice(),

@@ -18,12 +18,12 @@ type projectWriter interface {
 func newAttachCmd(cfg runConfig) *cobra.Command {
 	c := &cobra.Command{
 		Use:   "attach <pkg>",
-		Short: "Forward JDWP, repackaging the installed app when it is not debuggable",
+		Short: "Decode, patch, install, and forward JDWP for an installed package",
 		Long: `Attach a JDWP session for an installed package.
 
-If the package is not debuggable, attach pulls it, sets android:debuggable and a user-CA network security config, re-signs, and reinstalls. That replaces the installed app. A signature mismatch uninstalls the package first, which clears its data. When the official Android CLI is on PATH, that install and launch use android run --debug. Otherwise adb install and am set-debug-app are used.
+The pipeline always starts with pull and decode and ends with install. A step that is already done is skipped on its own: an existing apktool tree skips decode, and a manifest that is already debuggable or already trusts user CAs skips that part of the patch. Later steps still run.
 
-An already debuggable package is not pulled or patched. Launch stays on adb.
+Install replaces the installed app with a debug build signed by jdt. A signature mismatch uninstalls the package first, which clears its data. When the official Android CLI is on PATH, install and launch use android run --debug. Otherwise adb install and am set-debug-app are used.
 
 --studio writes .jdt/<pkg>/idea after the forward and does not open Android Studio.`,
 		Args: cobra.ExactArgs(1),
@@ -73,36 +73,36 @@ An already debuggable package is not pulled or patched. Launch stays on adb.
 }
 
 func writeAttachHuman(w io.Writer, res attach.Result) error {
-	if res.Repackaged {
+	if res.SkipDecode {
+		if _, err := fmt.Fprintln(w, "[skip] pull: decode already exists"); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(w, "[skip] decode: %s\n", res.DecodeDir); err != nil {
+			return err
+		}
+	} else {
 		if _, err := fmt.Fprintf(w, "[ok] pull: %s\n", res.PullAPK); err != nil {
 			return err
 		}
 		if _, err := fmt.Fprintf(w, "[ok] decode: %s\n", res.DecodeDir); err != nil {
 			return err
 		}
-		if err := writePatchHuman(w, res.Patch); err != nil {
+	}
+	if err := writePatchHuman(w, res.Patch); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(w, "[ok] sign: %s\n", res.Signed); err != nil {
+		return err
+	}
+	if res.Launch == attach.LaunchAndroid {
+		if _, err := fmt.Fprintln(w, "[ok] launch: android run --debug"); err != nil {
 			return err
-		}
-		if _, err := fmt.Fprintf(w, "[ok] sign: %s\n", res.Signed); err != nil {
-			return err
-		}
-		if res.Launch == attach.LaunchAndroid {
-			if _, err := fmt.Fprintln(w, "[ok] launch: android run --debug"); err != nil {
-				return err
-			}
-		} else {
-			if _, err := fmt.Fprintln(w, "[skip] android: cli unavailable"); err != nil {
-				return err
-			}
-			if _, err := fmt.Fprintf(w, "[ok] install: %s\n", res.Signed); err != nil {
-				return err
-			}
 		}
 	} else {
-		if _, err := fmt.Fprintln(w, "[skip] patch: already debuggable"); err != nil {
+		if _, err := fmt.Fprintln(w, "[skip] android: cli unavailable"); err != nil {
 			return err
 		}
-		if _, err := fmt.Fprintln(w, "[skip] android: no patched apks"); err != nil {
+		if _, err := fmt.Fprintf(w, "[ok] install: %s\n", res.Signed); err != nil {
 			return err
 		}
 	}
