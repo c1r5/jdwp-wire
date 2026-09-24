@@ -7,6 +7,8 @@ import (
 	"io"
 
 	"github.com/c1r5/jdwp-wire/internal/attach"
+	"github.com/c1r5/jdwp-wire/internal/execx"
+	"github.com/c1r5/jdwp-wire/internal/frida"
 	"github.com/c1r5/jdwp-wire/internal/project"
 	"github.com/spf13/cobra"
 )
@@ -25,7 +27,11 @@ The pipeline always starts with pull and decode and ends with install, then adb 
 
 Install replaces the installed app with a debug build signed by jdt. A signature mismatch uninstalls the package first, which clears its data. When the official Android CLI is on PATH, install and launch use android run --debug. Otherwise adb install and am set-debug-app are used.
 
---studio writes .jdt/<pkg>/idea after the forward and does not open Android Studio.`,
+--studio writes .jdt/<pkg>/idea after the forward and does not open Android Studio.
+
+--bypass loads antiroot-bypass, antidebug-bypass, and sslpinning-bypass after the forward. --script adds those names or a path to a .js file (comma-separated, repeatable). The app is left waiting for the debugger with the hooks armed. Output from Frida is filtered into .jdt/<pkg>/frida/YYYY-MM-DD.log. By default that stream is followed on stderr after the attach line. -d records the file and returns.
+
+The bundled scripts do not bypass Play Integrity. A path is loaded as given. frida-server must already be at /data/local/tmp/frida-server; jdt starts it with su when it is not running and does not download it.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(c *cobra.Command, args []string) error {
 			ctx, cancel := context.WithTimeout(c.Context(), cfg.apkTimeout+cfg.jdwpTimeout)
@@ -46,6 +52,25 @@ Install replaces the installed app with a debug build signed by jdt. A signature
 			if err != nil {
 				return err
 			}
+			bypass, err := c.Flags().GetBool("bypass")
+			if err != nil {
+				return err
+			}
+			detach, err := c.Flags().GetBool("detach")
+			if err != nil {
+				return err
+			}
+			scripts, err := c.Flags().GetStringArray("script")
+			if err != nil {
+				return err
+			}
+			if detach && !bypass && len(scripts) == 0 {
+				return fmt.Errorf("attach: --detach: %w", frida.ErrUsage)
+			}
+			refs, err := frida.Parse(bypass, scripts)
+			if err != nil {
+				return err
+			}
 			lg := cfg.logger
 			if asJSON {
 				lg = nil
@@ -61,12 +86,20 @@ Install replaces the installed app with a debug build signed by jdt. A signature
 				Patch:   cfg.patch,
 				Android: cfg.android,
 				Log:     lg,
+				Refs:    refs,
+				Detach:  detach,
+				Frida:   fridaDeps(cfg),
 			})
 			if err != nil {
 				return err
 			}
 			if asJSON {
-				return writeAttachJSON(c.OutOrStdout(), res)
+				if err := writeAttachJSON(c.OutOrStdout(), res); err != nil {
+					return err
+				}
+			}
+			if res.Frida != nil {
+				return res.Frida.Follow(c.Context(), cfg.stderr)
 			}
 			return nil
 		},
@@ -74,7 +107,18 @@ Install replaces the installed app with a debug build signed by jdt. A signature
 	c.Flags().StringP("serial", "s", "", "adb serial (required if multiple devices)")
 	c.Flags().Int("port", 8700, "local TCP port to forward")
 	c.Flags().Bool("studio", false, "write .jdt/<pkg>/idea for Android Studio (does not launch the IDE)")
+	c.Flags().Bool("bypass", false, "load antiroot-bypass, antidebug-bypass, and sslpinning-bypass")
+	c.Flags().StringArray("script", nil, "embedded script name or .js path, comma-separated; repeatable")
+	c.Flags().BoolP("detach", "d", false, "record the Frida log and do not follow it")
 	return c
+}
+
+func fridaDeps(cfg runConfig) frida.Deps {
+	deps := cfg.frida
+	if deps.Run == nil {
+		deps.Run = execx.Exec{}
+	}
+	return deps
 }
 
 type studioJSON struct {
@@ -92,6 +136,13 @@ type attachJSON struct {
 	Repackaged bool        `json:"repackaged"`
 	Launch     string      `json:"launch"`
 	Studio     *studioJSON `json:"studio,omitempty"`
+	Frida      *fridaJSON  `json:"frida,omitempty"`
+}
+
+type fridaJSON struct {
+	Scripts []string `json:"scripts"`
+	Log     string   `json:"log"`
+	Detach  bool     `json:"detach"`
 }
 
 func writeAttachJSON(w io.Writer, res attach.Result) error {
@@ -110,6 +161,9 @@ func writeAttachJSON(w io.Writer, res attach.Result) error {
 		out.Studio = &studioJSON{Dir: res.Project.Dir}
 	case attach.StudioNoDecode:
 		out.Studio = &studioJSON{Skipped: true, Reason: "no decode"}
+	}
+	if res.Frida != nil {
+		out.Frida = &fridaJSON{Scripts: res.Frida.Names, Log: res.Frida.Log, Detach: res.Frida.Detach}
 	}
 	b, err := json.Marshal(out)
 	if err != nil {

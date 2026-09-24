@@ -11,6 +11,7 @@ import (
 	"github.com/c1r5/jdwp-wire/internal/androidcli"
 	"github.com/c1r5/jdwp-wire/internal/apk"
 	"github.com/c1r5/jdwp-wire/internal/device"
+	"github.com/c1r5/jdwp-wire/internal/frida"
 	"github.com/c1r5/jdwp-wire/internal/install"
 	"github.com/c1r5/jdwp-wire/internal/jdwp"
 	"github.com/c1r5/jdwp-wire/internal/logging"
@@ -60,6 +61,10 @@ type Options struct {
 	Android androidcli.Client
 	// Log receives each step as it finishes. Nil stays quiet (--json).
 	Log *logging.Logger
+	// Refs loads Frida after the forward. Empty skips Frida entirely.
+	Refs   []frida.Ref
+	Detach bool
+	Frida  frida.Deps
 }
 
 // Result is the JDWP session plus whether the app was repackaged.
@@ -76,6 +81,7 @@ type Result struct {
 	Signed     string
 	Installed  bool
 	Device     device.Device
+	Frida      *frida.Opened
 }
 
 type repack struct {
@@ -137,6 +143,11 @@ func Run(ctx context.Context, dev device.Client, client jdwp.Client, opt Options
 	if len(packed.apks) > 0 {
 		res.Signed = packed.apks[0]
 	}
+	opened, err := armFrida(ctx, opt, live.Serial, sess.PID, layout)
+	if err != nil {
+		return Result{}, err
+	}
+	res.Frida = opened
 	if !opt.Studio {
 		res.Studio = StudioOff
 		opt.Log.Skip("studio", "pass --studio")
@@ -176,6 +187,33 @@ func formatDevice(d device.Device) string {
 
 func logAttach(lg *logging.Logger, port int) {
 	lg.OK("attach", fmt.Sprintf("127.0.0.1:%d", port))
+}
+
+func armFrida(ctx context.Context, opt Options, serial string, pid int, layout workspace.Layout) (*frida.Opened, error) {
+	if len(opt.Refs) == 0 {
+		return nil, nil
+	}
+	dir := filepath.Join(layout.Root, "frida")
+	opened, srv, err := frida.Open(ctx, opt.Frida, serial, pid, dir, opt.Refs, opt.Detach)
+	if err != nil {
+		return nil, err
+	}
+	if srv.Started {
+		opt.Log.OK("frida", "server started")
+	} else {
+		opt.Log.Skip("frida", "server already running")
+	}
+	opt.Log.OK("frida", strings.Join(opened.Names, ", "))
+	opt.Log.OK("frida", displayPath(opt.CWD, opened.Log))
+	return &opened, nil
+}
+
+func displayPath(cwd, path string) string {
+	rel, err := filepath.Rel(cwd, path)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		return path
+	}
+	return rel
 }
 
 func prepare(ctx context.Context, dev device.Client, opt Options, serial string, layout workspace.Layout) (repack, error) {

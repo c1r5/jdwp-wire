@@ -6,8 +6,12 @@ import (
 	"fmt"
 	"io"
 
+	"path/filepath"
+
+	"github.com/c1r5/jdwp-wire/internal/frida"
 	"github.com/c1r5/jdwp-wire/internal/logging"
 	"github.com/c1r5/jdwp-wire/internal/reset"
+	"github.com/c1r5/jdwp-wire/internal/workspace"
 	"github.com/spf13/cobra"
 )
 
@@ -43,6 +47,17 @@ func newResetCmd(cfg runConfig) *cobra.Command {
 			res, err := reset.Run(ctx, cfg.device, cfg.jdwp, serial, args[0], port)
 			if err != nil {
 				return err
+			}
+			layout, err := workspace.ForPackage(cfg.cwd, args[0])
+			if err != nil {
+				return err
+			}
+			stopped, err := frida.StopSession(filepath.Join(layout.Root, "frida"))
+			if err != nil {
+				return err
+			}
+			if stopped {
+				lg.OK("frida", "session stopped")
 			}
 			if asJSON {
 				return writeResetJSON(c.OutOrStdout(), res.Package, res.Serial, res.Port)

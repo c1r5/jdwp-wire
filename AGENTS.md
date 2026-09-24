@@ -67,7 +67,7 @@ jdt apps     [--system]
 jdt pull     <index|pkg|apk> [--decode] [--system]
 jdt patch    <decoded_dir|--apk>
 jdt install  <apk|decoded_dir|pkg>
-jdt attach   <pkg> [--port 8700] [--studio] [--no-patch]
+jdt attach   <pkg> [--port 8700] [--studio] [--script LIST] [--bypass] [-d]
 jdt targets  <pkg|decoded> [--http] [--crypto]
 jdt watch    --port 8700 [--dump-okhttp]   # v1
 jdt reset    <pkg>
@@ -95,7 +95,7 @@ O pipeline do attach começa no decode e termina no install, e em seguida faz `a
 | `project` | esqueleto IntelliJ em `.jdt/<pkg>/idea` (content root = decode) + Remote JVM Debug `127.0.0.1:PORT` | sim (`attach --studio` escreve depois do forward) | JADX sources opcional |
 | `targets` | sinks HTTP/crypto no smali/java            | lista OkHttp/Retrofit/HttpURLConnection | Cipher / pinning classes |
 | `capture` | dump JDWP do frame → JSON/HAR              | não | `watch --dump-okhttp` |
-| `frida`   | companion unpin / hide-debugger            | não | `--unpin` opcional |
+| `frida`   | companion opcional no attach: `--bypass` carrega antiroot, antidebug e ssl pinning; `--script` aceita esses nomes ou um `.js`; log filtrado em `.jdt/<pkg>/frida/AAAA-MM-DD.log`; follow no stderr; `-d` só grava o arquivo | não | sim |
 | `android` | shell-out p/ Android CLI se estiver no PATH | detect + `run --debug` | emulator, layout |
 | `logging` | linha humana `HH:MM:SS [ok\|skip] [módulo] ação`; só este pacote importa a lib de log | sim | — |
 
@@ -188,7 +188,7 @@ Inclui:
 
 4. PID certo: processo default vs `:remote` / isolated; flag `--process`.
 
-5. `--unpin`: script Frida companion só pra pinning comum; JDWP continua no centro.
+5. `jdt attach --bypass` / `--script` / `-d`: companion Frida depois do forward. JDWP continua no centro. Não existe `--unpin`. O server em `/data/local/tmp/frida-server` sobe com `su` se estiver parado; o `jdt` não baixa o binário. Scripts embutidos não contornam Play Integrity.
 
 6. Saúde do attach: timeout, “waiting for debugger”, re-forward se o processo morrer.
 
