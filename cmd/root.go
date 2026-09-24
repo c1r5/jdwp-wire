@@ -12,6 +12,7 @@ import (
 	"github.com/c1r5/jdwp-wire/internal/apk"
 	"github.com/c1r5/jdwp-wire/internal/device"
 	"github.com/c1r5/jdwp-wire/internal/execx"
+	"github.com/c1r5/jdwp-wire/internal/frida"
 	"github.com/c1r5/jdwp-wire/internal/jdwp"
 	"github.com/c1r5/jdwp-wire/internal/logging"
 	"github.com/c1r5/jdwp-wire/internal/patch"
@@ -49,6 +50,7 @@ type runConfig struct {
 	jdwpTimeout time.Duration
 	cwd         string
 	args        []string
+	frida       frida.Deps
 }
 
 // Run executes the CLI with process stdio.
@@ -140,19 +142,20 @@ func newRoot(cfg runConfig) *cobra.Command {
 	root.AddCommand(newAttachCmd(cfg))
 	root.AddCommand(newResetCmd(cfg))
 	root.AddCommand(newTargetsCmd(cfg))
+	root.AddCommand(newFridaSessionCmd())
 	return root
 }
 
 func exitCode(err error) int {
 	switch {
-	case errors.Is(err, device.ErrToolMissing), errors.Is(err, apk.ErrToolMissing), errors.Is(err, jdwp.ErrToolMissing), errors.Is(err, androidcli.ErrToolMissing):
+	case errors.Is(err, device.ErrToolMissing), errors.Is(err, apk.ErrToolMissing), errors.Is(err, jdwp.ErrToolMissing), errors.Is(err, androidcli.ErrToolMissing), errors.Is(err, frida.ErrToolMissing):
 		return ExitToolMissing
 	case errors.Is(err, device.ErrNoDevice),
 		errors.Is(err, device.ErrAmbiguousDevice),
 		errors.Is(err, device.ErrDeviceUnusable),
 		errors.Is(err, device.ErrDeviceNotFound):
 		return ExitNoDevice
-	case errors.Is(err, device.ErrUsage), errors.Is(err, apk.ErrUsage), errors.Is(err, patch.ErrUsage), errors.Is(err, jdwp.ErrUsage), errors.Is(err, targets.ErrUsage), errors.Is(err, project.ErrUsage), errors.Is(err, androidcli.ErrUsage):
+	case errors.Is(err, device.ErrUsage), errors.Is(err, apk.ErrUsage), errors.Is(err, patch.ErrUsage), errors.Is(err, jdwp.ErrUsage), errors.Is(err, targets.ErrUsage), errors.Is(err, project.ErrUsage), errors.Is(err, androidcli.ErrUsage), errors.Is(err, frida.ErrUsage):
 		return ExitUsage
 	}
 	msg := err.Error()

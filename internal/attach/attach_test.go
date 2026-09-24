@@ -1,17 +1,23 @@
 package attach
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/c1r5/jdwp-wire/internal/androidcli"
 	"github.com/c1r5/jdwp-wire/internal/apk"
 	"github.com/c1r5/jdwp-wire/internal/device"
+	"github.com/c1r5/jdwp-wire/internal/execx"
+	"github.com/c1r5/jdwp-wire/internal/frida"
 	"github.com/c1r5/jdwp-wire/internal/jdwp"
+	"github.com/c1r5/jdwp-wire/internal/logging"
 	"github.com/c1r5/jdwp-wire/internal/patch"
 	"github.com/c1r5/jdwp-wire/internal/project"
 	"github.com/c1r5/jdwp-wire/internal/workspace"
@@ -441,5 +447,91 @@ func TestRunExistingDecodeSkipsPullAndStillInstalls(t *testing.T) {
 	}
 	if !res.SkipDecode || !installed || res.Studio != StudioWritten || res.Patch.Debuggable != patch.ActionSkipped {
 		t.Fatalf("%+v installed=%v", res, installed)
+	}
+}
+
+func TestRun_FridaBeforeStudio(t *testing.T) {
+	t.Parallel()
+	var log bytes.Buffer
+	r, w := io.Pipe()
+	go func() {
+		_, _ = io.WriteString(w, "[Android::com.alvo]-> sslpinning-bypass armed\n")
+	}()
+	proc := &fridaHold{r: r, w: w, exit: make(chan error, 1), killed: make(chan struct{})}
+	res, err := Run(context.Background(), testDevice(), &jdwp.Fake{
+		AttachFn: func(_ context.Context, serial, pkg string, port int) (jdwp.Session, error) {
+			return jdwp.Session{Package: pkg, Serial: serial, PID: 11, Port: port}, nil
+		},
+	}, Options{
+		Package: "com.alvo",
+		Port:    8700,
+		CWD:     t.TempDir(),
+		APK:     adbTools(t),
+		Patch:   appliedPatch(),
+		Studio:  true,
+		Writer: &project.Fake{WriteFn: func(cfg project.Config) (project.Result, error) {
+			return project.Result{Dir: cfg.Layout.Idea}, nil
+		}},
+		Log:   logging.New(&log),
+		Refs:  []frida.Ref{{Name: frida.NameSSL}},
+		Frida: fridaDeps(proc),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := log.String()
+	fridaAt := strings.Index(text, "[frida] sslpinning-bypass")
+	studioAt := strings.Index(text, "[studio]")
+	attachAt := strings.Index(text, "[attach] 127.0.0.1:8700")
+	if fridaAt < 0 || studioAt < fridaAt || attachAt < studioAt {
+		t.Fatalf("log order\n%s", text)
+	}
+	if res.Frida == nil || res.Frida.Detach {
+		t.Fatalf("%+v", res.Frida)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := res.Frida.Follow(ctx, io.Discard); err != nil {
+		t.Fatal(err)
+	}
+}
+
+type fridaHold struct {
+	r      *io.PipeReader
+	w      *io.PipeWriter
+	exit   chan error
+	killed chan struct{}
+}
+
+func (h *fridaHold) PID() int          { return 1 }
+func (h *fridaHold) Stdout() io.Reader { return h.r }
+func (h *fridaHold) Stderr() io.Reader { return strings.NewReader("") }
+func (h *fridaHold) Kill() error {
+	select {
+	case <-h.killed:
+	default:
+		close(h.killed)
+	}
+	_ = h.w.Close()
+	return nil
+}
+func (h *fridaHold) Wait() error {
+	select {
+	case <-h.killed:
+		return fmt.Errorf("killed")
+	case err := <-h.exit:
+		return err
+	}
+}
+
+func fridaDeps(proc frida.Proc) frida.Deps {
+	return frida.Deps{
+		Run: &execx.Fake{RunFn: func(context.Context, string, ...string) (execx.Result, error) {
+			return execx.Result{Stdout: "9\n"}, nil
+		}},
+		Look: func(string) (string, error) { return "frida", nil },
+		Start: func(context.Context, string, ...string) (frida.Proc, error) {
+			return proc, nil
+		},
 	}
 }

@@ -21,15 +21,19 @@ type Log struct {
 
 // OpenLog creates dir and opens the daily file for append.
 func OpenLog(dir string, now time.Time) (*Log, error) {
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	return OpenLogAt(LogPath(dir, now))
+}
+
+// OpenLogAt appends to path, creating the parent directory.
+func OpenLogAt(path string) (*Log, error) {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return nil, fmt.Errorf("frida: log: %w", err)
 	}
-	p := LogPath(dir, now)
-	f, err := os.OpenFile(p, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
 	if err != nil {
 		return nil, fmt.Errorf("frida: log: %w", err)
 	}
-	return &Log{path: p, f: f}, nil
+	return &Log{path: path, f: f}, nil
 }
 
 // Path is the absolute or joined path passed to OpenLog.

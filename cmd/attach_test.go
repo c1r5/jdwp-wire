@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,6 +13,8 @@ import (
 	"github.com/c1r5/jdwp-wire/internal/androidcli"
 	"github.com/c1r5/jdwp-wire/internal/apk"
 	"github.com/c1r5/jdwp-wire/internal/device"
+	"github.com/c1r5/jdwp-wire/internal/execx"
+	"github.com/c1r5/jdwp-wire/internal/frida"
 	"github.com/c1r5/jdwp-wire/internal/jdwp"
 	"github.com/c1r5/jdwp-wire/internal/patch"
 	"github.com/c1r5/jdwp-wire/internal/project"
@@ -255,6 +258,70 @@ func TestAttachNoDevice(t *testing.T) {
 	})
 	if code != ExitNoDevice {
 		t.Fatalf("exit %d want %d stderr=%q", code, ExitNoDevice, stderr.String())
+	}
+}
+
+func TestAttachDetachWithoutScript(t *testing.T) {
+	t.Parallel()
+	var stderr bytes.Buffer
+	code := attachRun(t, runConfig{
+		stderr: &stderr,
+		device: testDevice(),
+		jdwp:   &jdwp.Fake{},
+		args:   []string{"attach", "com.alvo", "-d"},
+	})
+	if code != ExitUsage {
+		t.Fatalf("exit %d stderr %q", code, stderr.String())
+	}
+}
+
+func TestAttachBypassDetachJSON(t *testing.T) {
+	t.Parallel()
+	var stdout, stderr bytes.Buffer
+	r, w := io.Pipe()
+	code := attachRun(t, runConfig{
+		stdout: &stdout,
+		stderr: &stderr,
+		device: testDevice(),
+		jdwp: &jdwp.Fake{AttachFn: func(_ context.Context, serial, pkg string, port int) (jdwp.Session, error) {
+			return jdwp.Session{Package: pkg, Serial: serial, PID: 3, Port: port}, nil
+		}},
+		frida: frida.Deps{
+			Run: &execx.Fake{RunFn: func(context.Context, string, ...string) (execx.Result, error) {
+				return execx.Result{Stdout: "9\n"}, nil
+			}},
+			Look: func(string) (string, error) { return "frida", nil },
+			Spawn: func(string, ...string) (int, io.ReadCloser, error) {
+				go func() { _, _ = io.WriteString(w, "ready\n") }()
+				return 99, r, nil
+			},
+		},
+		args: []string{"attach", "com.alvo", "--bypass", "-d", "--json"},
+	})
+	if code != ExitOK {
+		t.Fatalf("exit %d stderr %q", code, stderr.String())
+	}
+	var out attachJSON
+	if err := json.Unmarshal(stdout.Bytes(), &out); err != nil {
+		t.Fatalf("json %v\n%s", err, stdout.String())
+	}
+	if out.Frida == nil || !out.Frida.Detach || len(out.Frida.Scripts) != 3 || !strings.Contains(out.Frida.Log, "frida") {
+		t.Fatalf("%+v", out.Frida)
+	}
+	if strings.Contains(stderr.String(), "Frida ") {
+		t.Fatalf("stderr %q", stderr.String())
+	}
+}
+
+func TestHelpHidesFridaSession(t *testing.T) {
+	t.Parallel()
+	var stdout, stderr bytes.Buffer
+	code := run(runConfig{stdout: &stdout, stderr: &stderr, args: []string{"--help"}})
+	if code != ExitOK {
+		t.Fatalf("exit %d %s", code, stderr.String())
+	}
+	if strings.Contains(stdout.String(), "frida-session") {
+		t.Fatalf("help lists frida-session\n%s", stdout.String())
 	}
 }
 
