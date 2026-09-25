@@ -26,10 +26,8 @@ coverage.out
 
 # OS
 .DS_Store
-# grok local/session output; versioned agent rules stay in git
-.grok/*
-!.grok/rules/
-!.grok/rules/**
+# grok local: regras de desenvolvimento e skills ficam só na máquina
+.grok/
 
 /.rtk
 /spec-*.md
