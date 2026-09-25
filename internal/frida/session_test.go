@@ -38,8 +38,15 @@ func TestOpen_FollowStripsBanner(t *testing.T) {
 		t.Fatalf("server %+v", srv)
 	}
 	joined := strings.Join(args, " ")
-	if !strings.Contains(joined, "-D emulator-5554") || !strings.Contains(joined, "-p 7") || !strings.Contains(joined, "-l ") {
+	if !strings.Contains(joined, "-D emulator-5554") || !strings.Contains(joined, "-p 7") || strings.Count(joined, " -l ") != 1 || !strings.Contains(joined, "load.js") {
 		t.Fatalf("args %s", joined)
+	}
+	loader, err := os.ReadFile(dir + "/load.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(loader), "Application.attach") || !strings.Contains(string(loader), "sslpinning-bypass armed") {
+		t.Fatalf("loader %s", loader)
 	}
 	if strings.Contains(joined, "--eternalize") || strings.Contains(joined, " -q") {
 		t.Fatalf("args %s", joined)
@@ -100,7 +107,7 @@ func TestOpen_Detach(t *testing.T) {
 		t.Fatalf("%+v", opened)
 	}
 	joined := strings.Join(got, " ")
-	if !strings.Contains(joined, "frida-session") || !strings.Contains(joined, "--serial emulator-5554") || !strings.Contains(joined, "--pid 7") || !strings.Contains(joined, "--package com.alvo") || !strings.Contains(joined, "--port 8700") {
+	if !strings.Contains(joined, "frida-session") || !strings.Contains(joined, "--serial emulator-5554") || !strings.Contains(joined, "--pid 7") || !strings.Contains(joined, "--package com.alvo") || !strings.Contains(joined, "--port 8700") || !strings.Contains(joined, "load.js") {
 		t.Fatalf("spawn %s", joined)
 	}
 	body, err := osRead(dir + "/session.pid")

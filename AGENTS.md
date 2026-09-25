@@ -188,7 +188,7 @@ Inclui:
 
 4. PID certo: processo default vs `:remote` / isolated; flag `--process`.
 
-5. `jdt attach --bypass` / `--script` / `-d`: companion Frida depois do forward. JDWP continua no centro. Não existe `--unpin`. O server em `/data/local/tmp/frida-server` sobe com `su` se estiver parado; o `jdt` não baixa o binário. Scripts embutidos não contornam Play Integrity. SIGINT/SIGTERM mata o CLI (ou o `frida-session` no `-d`) e fecha o app; o server continua.
+5. `jdt attach --bypass` / `--script` / `-d`: companion Frida depois do forward. JDWP continua no centro. Não existe `--unpin`. O server em `/data/local/tmp/frida-server` sobe com `su` se estiver parado; o `jdt` não baixa o binário. Scripts embutidos não contornam Play Integrity. O processo segue esperando o debugger. `Java.perform` do script roda em `Application.attach`, depois do resume e antes de `onCreate` — `handleBindApplication` já está na stack durante o wait, e o gancho do bridge nessa função não vê essa chamada. SIGINT/SIGTERM mata o CLI (ou o `frida-session` no `-d`) e fecha o app; o server continua.
 
 6. Saúde do attach: timeout, “waiting for debugger”, re-forward se o processo morrer.
 

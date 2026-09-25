@@ -98,11 +98,15 @@ func Open(ctx context.Context, dep Deps, serial, pkg string, pid, port int, dir 
 	}
 	logPath := LogPath(dir, now())
 	names := make([]string, len(files))
-	args := []string{"-D", serial, "-p", strconv.Itoa(pid)}
 	for i, ref := range files {
 		names[i] = ref.Name
-		args = append(args, "-l", ref.Path)
 	}
+	loader, err := writeLoader(dir, files)
+	if err != nil {
+		return Opened{}, srv, err
+	}
+	args := []string{"-D", serial, "-p", strconv.Itoa(pid), "-l", loader}
+	files = []Ref{{Path: loader}}
 	wait := dep.ReadyAfter
 	if wait <= 0 {
 		wait = readyWait

@@ -29,7 +29,7 @@ Install replaces the installed app with a debug build signed by jdt. A signature
 
 --studio writes .jdt/<pkg>/idea after the forward and does not open Android Studio.
 
---bypass loads antiroot-bypass, antidebug-bypass, and sslpinning-bypass after the forward. --script adds those names or a path to a .js file (comma-separated, repeatable). The app is left waiting for the debugger with the hooks armed. Output from Frida is filtered into .jdt/<pkg>/frida/YYYY-MM-DD.log. By default that stream is followed on stderr after the attach line. -d records the file and returns.
+--bypass loads antiroot-bypass, antidebug-bypass, and sslpinning-bypass after the forward. --script adds those names or a path to a .js file (comma-separated, repeatable). The app stays waiting for the debugger. Java hooks run in Application.attach, after the debugger resumes and before onCreate. Output from Frida is filtered into .jdt/<pkg>/frida/YYYY-MM-DD.log. By default that stream is followed on stderr after the attach line. -d records the file and returns.
 
 The bundled scripts do not bypass Play Integrity. A path is loaded as given. frida-server must already be at /data/local/tmp/frida-server; jdt starts it with su when it is not running and does not download it.
 
