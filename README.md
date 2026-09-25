@@ -81,4 +81,4 @@ go install .          # binário GOBIN: jdwp-wire (module path)
 ./jdt targets com.alvo --json
 ```
 
-Product contract: [`AGENTS.md`](AGENTS.md). Repo workflow: [`.grok/rules/development-rules.md`](.grok/rules/development-rules.md).
+Product contract: [`AGENTS.md`](AGENTS.md).
