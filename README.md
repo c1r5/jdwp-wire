@@ -22,4 +22,4 @@ O desenho dos comandos está em [docs/diagram.md](docs/diagram.md). O uso, com o
 
 Workspace local: `./.jdt/<package>/`. Nada disso vai pro git.
 
-Contrato do produto: [AGENTS.md](AGENTS.md). Fluxo do repo: [.grok/rules/development-rules.md](.grok/rules/development-rules.md).
+Contrato do produto: [AGENTS.md](AGENTS.md).
