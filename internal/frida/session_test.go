@@ -1,12 +1,14 @@
 package frida
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -28,7 +30,7 @@ func TestOpen_FollowStripsBanner(t *testing.T) {
 			args = append([]string{name}, a...)
 			return proc, nil
 		},
-	}, "emulator-5554", 7, dir, []Ref{{Name: NameSSL}}, false)
+	}, "emulator-5554", "com.alvo", 7, 8700, dir, []Ref{{Name: NameSSL}}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +72,7 @@ func TestOpen_LoadFailure(t *testing.T) {
 		Start: func(context.Context, string, ...string) (Proc, error) {
 			return proc, nil
 		},
-	}, "emulator-5554", 7, t.TempDir(), []Ref{{Name: NameRoot}}, false)
+	}, "emulator-5554", "com.alvo", 7, 8700, t.TempDir(), []Ref{{Name: NameRoot}}, false)
 	if err == nil || !strings.Contains(err.Error(), "Failed to attach") {
 		t.Fatalf("err %v", err)
 	}
@@ -90,7 +92,7 @@ func TestOpen_Detach(t *testing.T) {
 			go func() { _, _ = fmt.Fprintln(w, "ready") }()
 			return 4242, r, nil
 		},
-	}, "emulator-5554", 7, dir, []Ref{{Name: NameSSL}}, true)
+	}, "emulator-5554", "com.alvo", 7, 8700, dir, []Ref{{Name: NameSSL}}, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -98,7 +100,7 @@ func TestOpen_Detach(t *testing.T) {
 		t.Fatalf("%+v", opened)
 	}
 	joined := strings.Join(got, " ")
-	if !strings.Contains(joined, "frida-session") || !strings.Contains(joined, "--serial emulator-5554") || !strings.Contains(joined, "--pid 7") {
+	if !strings.Contains(joined, "frida-session") || !strings.Contains(joined, "--serial emulator-5554") || !strings.Contains(joined, "--pid 7") || !strings.Contains(joined, "--package com.alvo") || !strings.Contains(joined, "--port 8700") {
 		t.Fatalf("spawn %s", joined)
 	}
 	body, err := osRead(dir + "/session.pid")
@@ -128,6 +130,67 @@ func TestStopSession_SignalsPID(t *testing.T) {
 	_ = cmd.Wait()
 	if _, err := osRead(dir + "/session.pid"); err == nil {
 		t.Fatal("pid file remains")
+	}
+}
+
+func TestOpen_StopKills(t *testing.T) {
+	t.Parallel()
+	proc := holdProc("sslpinning-bypass armed\n")
+	opened, _, err := Open(context.Background(), Deps{
+		Run:  runningServer(),
+		Look: func(string) (string, error) { return "frida", nil },
+		Start: func(context.Context, string, ...string) (Proc, error) {
+			return proc, nil
+		},
+	}, "emulator-5554", "com.alvo", 7, 8700, t.TempDir(), []Ref{{Name: NameSSL}}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	opened.Stop()
+	select {
+	case <-proc.killed:
+	case <-time.After(time.Second):
+		t.Fatal("frida still running")
+	}
+}
+
+func TestServe_CancelClosesApp(t *testing.T) {
+	t.Parallel()
+	proc := holdProc("sslpinning-bypass armed\n")
+	ctx, cancel := context.WithCancel(context.Background())
+	var got []string
+	statusR, statusW := io.Pipe()
+	errc := make(chan error, 1)
+	go func() {
+		errc <- Serve(ctx, Deps{
+			Look: func(string) (string, error) { return "frida", nil },
+			Start: func(context.Context, string, ...string) (Proc, error) {
+				return proc, nil
+			},
+			Run: &execx.Fake{RunFn: func(_ context.Context, name string, args ...string) (execx.Result, error) {
+				got = append(got, strings.Join(append([]string{name}, args...), " "))
+				return execx.Result{}, nil
+			}},
+		}, "emulator-5554", "com.alvo", 7, 8700, filepath.Join(t.TempDir(), "frida.log"), []string{"/x.js"}, statusW)
+	}()
+	line, readErr := bufio.NewReader(statusR).ReadString('\n')
+	if readErr != nil || !strings.Contains(line, "ready") {
+		t.Fatalf("status %q err %v", line, readErr)
+	}
+	cancel()
+	if err := <-errc; err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-proc.killed:
+	default:
+		t.Fatal("frida still running")
+	}
+	joined := strings.Join(got, "\n")
+	for _, want := range []string{"am force-stop com.alvo", "am clear-debug-app", "forward --remove tcp:8700"} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("missing %s in %s", want, joined)
+		}
 	}
 }
 

@@ -31,7 +31,9 @@ Install replaces the installed app with a debug build signed by jdt. A signature
 
 --bypass loads antiroot-bypass, antidebug-bypass, and sslpinning-bypass after the forward. --script adds those names or a path to a .js file (comma-separated, repeatable). The app is left waiting for the debugger with the hooks armed. Output from Frida is filtered into .jdt/<pkg>/frida/YYYY-MM-DD.log. By default that stream is followed on stderr after the attach line. -d records the file and returns.
 
-The bundled scripts do not bypass Play Integrity. A path is loaded as given. frida-server must already be at /data/local/tmp/frida-server; jdt starts it with su when it is not running and does not download it.`,
+The bundled scripts do not bypass Play Integrity. A path is loaded as given. frida-server must already be at /data/local/tmp/frida-server; jdt starts it with su when it is not running and does not download it.
+
+SIGINT and SIGTERM stop the in-flight command. Once launch has started, jdt force-stops the package, clears the debug app, and removes the forward before it exits. A foreground Frida CLI is killed. -d signals the detached frida-session, which closes the app the same way. frida-server is left running. An attach that returns without a signal leaves the app waiting for the debugger.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(c *cobra.Command, args []string) error {
 			ctx, cancel := context.WithTimeout(c.Context(), cfg.apkTimeout+cfg.jdwpTimeout)
@@ -75,20 +77,27 @@ The bundled scripts do not bypass Play Integrity. A path is loaded as given. fri
 			if asJSON {
 				lg = nil
 			}
-			res, err := attach.Run(ctx, cfg.device, cfg.jdwp, attach.Options{
-				Serial:  serial,
-				Package: args[0],
-				Port:    port,
-				CWD:     cfg.cwd,
-				Studio:  studio,
-				Writer:  cfg.projects,
-				APK:     cfg.apk,
-				Patch:   cfg.patch,
-				Android: cfg.android,
-				Log:     lg,
-				Refs:    refs,
-				Detach:  detach,
-				Frida:   fridaDeps(cfg),
+			var res attach.Result
+			defer func() {
+				if c.Context().Err() != nil {
+					_ = attach.Stop(cfg.jdwp, res)
+				}
+			}()
+			res, err = attach.Run(ctx, cfg.device, cfg.jdwp, attach.Options{
+				Serial:   serial,
+				Package:  args[0],
+				Port:     port,
+				CWD:      cfg.cwd,
+				Studio:   studio,
+				Writer:   cfg.projects,
+				APK:      cfg.apk,
+				Patch:    cfg.patch,
+				Android:  cfg.android,
+				Log:      lg,
+				Refs:     refs,
+				Detach:   detach,
+				Frida:    fridaDeps(cfg),
+				Lifetime: c.Context(),
 			})
 			if err != nil {
 				return err

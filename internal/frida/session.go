@@ -34,6 +34,9 @@ type Deps struct {
 	Look       func(string) (string, error)
 	Now        func() time.Time
 	ReadyAfter time.Duration
+	// ProcCtx kills the foreground frida CLI when it is canceled.
+	// Nil leaves the CLI unbound so a command timeout does not end the follow.
+	ProcCtx context.Context
 }
 
 // Opened is a Frida session that is already past the banner.
@@ -44,6 +47,16 @@ type Opened struct {
 	Detach bool
 
 	follow func(context.Context, io.Writer) error
+	stop   func()
+}
+
+// Stop kills the foreground frida CLI. Detach has nothing to kill here;
+// the supervisor pid is in session.pid.
+func (o *Opened) Stop() {
+	if o == nil || o.stop == nil {
+		return
+	}
+	o.stop()
 }
 
 // Follow copies rewritten lines to w until the CLI exits or ctx is canceled.
@@ -60,7 +73,7 @@ func (o *Opened) Follow(ctx context.Context, w io.Writer) error {
 
 // Open checks frida-server, writes the scripts, and starts the CLI.
 // dir is .jdt/<pkg>/frida. The returned Server says whether this call started it.
-func Open(ctx context.Context, dep Deps, serial string, pid int, dir string, refs []Ref, detach bool) (Opened, Server, error) {
+func Open(ctx context.Context, dep Deps, serial, pkg string, pid, port int, dir string, refs []Ref, detach bool) (Opened, Server, error) {
 	if pid <= 0 || serial == "" {
 		return Opened{}, Server{}, fmt.Errorf("frida: session: %w", ErrUsage)
 	}
@@ -95,14 +108,18 @@ func Open(ctx context.Context, dep Deps, serial string, pid int, dir string, ref
 		wait = readyWait
 	}
 	if detach {
-		opened, err := spawnSupervisor(ctx, dep, serial, pid, logPath, files, names)
+		opened, err := spawnSupervisor(ctx, dep, serial, pkg, pid, port, logPath, files, names)
 		return opened, srv, err
 	}
 	start := dep.Start
 	if start == nil {
 		start = startExec
 	}
-	proc, err := start(context.Background(), "frida", args...)
+	procCtx := dep.ProcCtx
+	if procCtx == nil {
+		procCtx = context.Background()
+	}
+	proc, err := start(procCtx, "frida", args...)
 	if err != nil {
 		return Opened{}, srv, fmt.Errorf("frida: %w", err)
 	}
@@ -117,7 +134,7 @@ func Open(ctx context.Context, dep Deps, serial string, pid int, dir string, ref
 		_ = lg.Close()
 		return Opened{}, srv, err
 	}
-	return Opened{Names: names, Log: lg.Path(), follow: loop.follow}, srv, nil
+	return Opened{Names: names, Log: lg.Path(), follow: loop.follow, stop: func() { _ = proc.Kill() }}, srv, nil
 }
 
 func startExec(ctx context.Context, name string, args ...string) (Proc, error) {
@@ -296,12 +313,19 @@ func merge(a, b io.Reader) io.Reader {
 	return pr
 }
 
-func spawnSupervisor(ctx context.Context, dep Deps, serial string, pid int, logPath string, files []Ref, names []string) (Opened, error) {
+func spawnSupervisor(ctx context.Context, dep Deps, serial, pkg string, pid, port int, logPath string, files []Ref, names []string) (Opened, error) {
 	exe, err := os.Executable()
 	if err != nil {
 		return Opened{}, fmt.Errorf("frida: %w", err)
 	}
-	args := []string{"frida-session", "--serial", serial, "--pid", strconv.Itoa(pid), "--log", logPath}
+	args := []string{
+		"frida-session",
+		"--serial", serial,
+		"--package", pkg,
+		"--pid", strconv.Itoa(pid),
+		"--port", strconv.Itoa(port),
+		"--log", logPath,
+	}
 	for _, ref := range files {
 		args = append(args, "--script", ref.Path)
 	}
@@ -365,11 +389,27 @@ func pidPath(dir string) string { return dir + string(os.PathSeparator) + "sessi
 
 // Serve runs inside the detached jdt frida-session process.
 // It writes "ready" or "fail …" to status, then keeps appending the daily log.
-func Serve(ctx context.Context, serial string, pid int, logPath string, scripts []string, status io.Writer) error {
+// Cancel closes the app and kills the frida CLI. frida-server stays up.
+func Serve(ctx context.Context, dep Deps, serial, pkg string, pid, port int, logPath string, scripts []string, status io.Writer) (err error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	defer func() {
+		if ctx.Err() == nil {
+			return
+		}
+		if stopErr := stopApp(dep.Run, serial, pkg, port); stopErr != nil && err == nil {
+			err = stopErr
+		}
+	}()
 	if serial == "" || pid <= 0 || logPath == "" || len(scripts) == 0 {
 		return fmt.Errorf("frida: session: %w", ErrUsage)
 	}
-	if _, err := execx.Look("frida"); err != nil {
+	look := dep.Look
+	if look == nil {
+		look = execx.Look
+	}
+	if _, lookErr := look("frida"); lookErr != nil {
 		_, _ = fmt.Fprintln(status, "fail frida not on PATH")
 		return fmt.Errorf("frida: %w", ErrToolMissing)
 	}
@@ -377,7 +417,11 @@ func Serve(ctx context.Context, serial string, pid int, logPath string, scripts 
 	for _, path := range scripts {
 		args = append(args, "-l", path)
 	}
-	proc, err := startExec(ctx, "frida", args...)
+	start := dep.Start
+	if start == nil {
+		start = startExec
+	}
+	proc, err := start(ctx, "frida", args...)
 	if err != nil {
 		_, _ = fmt.Fprintf(status, "fail %s\n", err.Error())
 		return err
@@ -399,7 +443,12 @@ func Serve(ctx context.Context, serial string, pid int, logPath string, scripts 
 		_ = proc.Kill()
 		return err
 	}
-	<-loop.finished
+	select {
+	case <-ctx.Done():
+		_ = proc.Kill()
+		<-loop.finished
+	case <-loop.finished:
+	}
 	_ = lg.Close()
 	return nil
 }

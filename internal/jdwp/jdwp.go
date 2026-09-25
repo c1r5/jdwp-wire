@@ -28,4 +28,7 @@ type Client interface {
 	// Bind waits for the package PID and forwards. It does not open the JDWP socket.
 	Bind(ctx context.Context, serial, pkg string, port int) (Session, error)
 	Reset(ctx context.Context, serial, pkg string, port int) error
+	// ForceStop closes the package, clears set-debug-app, and removes the forward.
+	// It uses its own timeout so a canceled command context can still call it.
+	ForceStop(serial, pkg string, port int) error
 }

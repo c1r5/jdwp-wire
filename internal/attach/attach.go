@@ -65,6 +65,9 @@ type Options struct {
 	Refs   []frida.Ref
 	Detach bool
 	Frida  frida.Deps
+	// Lifetime is canceled on SIGINT/SIGTERM and not by the command timeout.
+	// The CLI calls Stop when it ends so the app is closed before the process exits.
+	Lifetime context.Context
 }
 
 // Result is the JDWP session plus whether the app was repackaged.
@@ -82,6 +85,8 @@ type Result struct {
 	Installed  bool
 	Device     device.Device
 	Frida      *frida.Opened
+	// Launched is set once install/launch has started, including when a later step fails.
+	Launched bool
 }
 
 type repack struct {
@@ -125,14 +130,7 @@ func Run(ctx context.Context, dev device.Client, client jdwp.Client, opt Options
 		s.SetLog(opt.Log)
 		selfLog = opt.Log != nil
 	}
-	sess, launch, installed, err := start(ctx, client, opt, live.Serial, &packed, selfLog)
-	if err != nil {
-		return Result{}, err
-	}
 	res := Result{
-		Session:    sess,
-		Launch:     launch,
-		Installed:  installed,
 		Repackaged: true,
 		SkipDecode: packed.skipDecode,
 		PullAPK:    packed.pull,
@@ -140,14 +138,21 @@ func Run(ctx context.Context, dev device.Client, client jdwp.Client, opt Options
 		Patch:      packed.patch,
 		Device:     live,
 	}
+	sess, launch, installed, err := start(ctx, client, opt, live.Serial, &packed, selfLog, &res)
+	if err != nil {
+		return res, err
+	}
+	res.Session = sess
+	res.Launch = launch
+	res.Installed = installed
 	if len(packed.apks) > 0 {
 		res.Signed = packed.apks[0]
 	}
 	opened, err := armFrida(ctx, opt, live.Serial, sess.PID, layout)
-	if err != nil {
-		return Result{}, err
-	}
 	res.Frida = opened
+	if err != nil {
+		return res, err
+	}
 	if !opt.Studio {
 		res.Studio = StudioOff
 		opt.Log.Skip("studio", "pass --studio")
@@ -162,7 +167,7 @@ func Run(ctx context.Context, dev device.Client, client jdwp.Client, opt Options
 		return res, nil
 	}
 	if err != nil {
-		return Result{}, fmt.Errorf("attach: studio: %w", err)
+		return res, fmt.Errorf("attach: studio: %w", err)
 	}
 	res.Studio = StudioWritten
 	res.Project = wrote
@@ -194,7 +199,11 @@ func armFrida(ctx context.Context, opt Options, serial string, pid int, layout w
 		return nil, nil
 	}
 	dir := filepath.Join(layout.Root, "frida")
-	opened, srv, err := frida.Open(ctx, opt.Frida, serial, pid, dir, opt.Refs, opt.Detach)
+	dep := opt.Frida
+	if dep.ProcCtx == nil {
+		dep.ProcCtx = opt.Lifetime
+	}
+	opened, srv, err := frida.Open(ctx, dep, serial, opt.Package, pid, opt.Port, dir, opt.Refs, opt.Detach)
 	if err != nil {
 		return nil, err
 	}
@@ -268,11 +277,15 @@ func decodeReady(dir string) bool {
 	return true
 }
 
-func start(ctx context.Context, client jdwp.Client, opt Options, serial string, packed *repack, selfLog bool) (jdwp.Session, Launch, bool, error) {
+func start(ctx context.Context, client jdwp.Client, opt Options, serial string, packed *repack, selfLog bool, res *Result) (jdwp.Session, Launch, bool, error) {
 	ok, err := androidAvailable(ctx, opt.Android)
 	if err != nil {
 		return jdwp.Session{}, "", false, err
 	}
+	res.Launched = true
+	res.Session.Package = opt.Package
+	res.Session.Serial = serial
+	res.Session.Port = opt.Port
 	if ok {
 		if err := deploy(ctx, opt, serial, packed.apks, true); err != nil {
 			return jdwp.Session{}, "", false, err

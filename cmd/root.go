@@ -1,11 +1,14 @@
 package cmd
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/c1r5/jdwp-wire/internal/androidcli"
@@ -114,7 +117,9 @@ func run(cfg runConfig) int {
 	root.SetOut(cfg.stdout)
 	root.SetErr(cfg.stderr)
 
-	if err := root.Execute(); err != nil {
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	if err := root.ExecuteContext(ctx); err != nil {
 		if _, werr := fmt.Fprintf(cfg.stderr, "jdt: %v\n", err); werr != nil {
 			return 1
 		}
