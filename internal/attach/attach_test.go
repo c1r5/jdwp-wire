@@ -69,6 +69,9 @@ func TestRun(t *testing.T) {
 	if sess.Session.Serial != "emulator-5554" || sess.Session.Package != "com.alvo" || sess.Session.Port != 8700 {
 		t.Fatalf("%+v", sess.Session)
 	}
+	if !sess.Launched {
+		t.Fatal("launched")
+	}
 }
 
 func TestRunStudioWrites(t *testing.T) {

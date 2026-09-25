@@ -6,9 +6,10 @@ import (
 )
 
 type Fake struct {
-	AttachFn func(ctx context.Context, serial, pkg string, port int) (Session, error)
-	BindFn   func(ctx context.Context, serial, pkg string, port int) (Session, error)
-	ResetFn  func(ctx context.Context, serial, pkg string, port int) error
+	AttachFn    func(ctx context.Context, serial, pkg string, port int) (Session, error)
+	BindFn      func(ctx context.Context, serial, pkg string, port int) (Session, error)
+	ResetFn     func(ctx context.Context, serial, pkg string, port int) error
+	ForceStopFn func(serial, pkg string, port int) error
 }
 
 func fakeErr() error {
@@ -34,6 +35,13 @@ func (f *Fake) Reset(ctx context.Context, serial, pkg string, port int) error {
 		return fakeErr()
 	}
 	return f.ResetFn(ctx, serial, pkg, port)
+}
+
+func (f *Fake) ForceStop(serial, pkg string, port int) error {
+	if f == nil || f.ForceStopFn == nil {
+		return nil
+	}
+	return f.ForceStopFn(serial, pkg, port)
 }
 
 var _ Client = (*Fake)(nil)

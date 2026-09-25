@@ -79,7 +79,7 @@ Atalho do dia a dia (MVP):
 jdt attach com.alvo --port 8700 --studio
 ```
 
-O pipeline do attach começa no decode e termina no install, e em seguida faz `adb -s <serial> forward tcp:PORT jdwp:PID` só se esse serial ainda estiver ligado. Etapa já feita é skip só dela: árvore apktool existente não volta a puxar; manifest já debuggable ou com NSC de CA do usuário não repete essa parte do patch. O install e o resto correm na mesma. `android run --debug` entra nesse install quando a CLI 1.0 está no PATH. Sem a CLI, `adb install` e `am`. O debugger no host liga em `127.0.0.1:PORT` (o `adb forward` escuta em IPv4). O attach não abre esse socket: a primeira ligação JDWP é o handshake, e um probe TCP fecha-o antes do Android Studio.
+O pipeline do attach começa no decode e termina no install, e em seguida faz `adb -s <serial> forward tcp:PORT jdwp:PID` só se esse serial ainda estiver ligado. Etapa já feita é skip só dela: árvore apktool existente não volta a puxar; manifest já debuggable ou com NSC de CA do usuário não repete essa parte do patch. O install e o resto correm na mesma. `android run --debug` entra nesse install quando a CLI 1.0 está no PATH. Sem a CLI, `adb install` e `am`. O debugger no host liga em `127.0.0.1:PORT` (o `adb forward` escuta em IPv4). O attach não abre esse socket: a primeira ligação JDWP é o handshake, e um probe TCP fecha-o antes do Android Studio. SIGINT/SIGTERM cancela o comando. Se o launch já começou, o processo fecha o app (`am force-stop`), limpa `set-debug-app` e remove o forward antes de sair. O CLI do Frida morre junto. No `-d`, o `frida-session` faz esse teardown. `frida-server` fica. Sem sinal, o attach que retorna deixa o app esperando o debugger.
 
 ---
 
@@ -95,7 +95,7 @@ O pipeline do attach começa no decode e termina no install, e em seguida faz `a
 | `project` | esqueleto IntelliJ em `.jdt/<pkg>/idea` (content root = decode) + Remote JVM Debug `127.0.0.1:PORT` | sim (`attach --studio` escreve depois do forward) | JADX sources opcional |
 | `targets` | sinks HTTP/crypto no smali/java            | lista OkHttp/Retrofit/HttpURLConnection | Cipher / pinning classes |
 | `capture` | dump JDWP do frame → JSON/HAR              | não | `watch --dump-okhttp` |
-| `frida`   | companion opcional no attach: `--bypass` carrega antiroot, antidebug e ssl pinning; `--script` aceita esses nomes ou um `.js`; log filtrado em `.jdt/<pkg>/frida/AAAA-MM-DD.log`; follow no stderr; `-d` só grava o arquivo | não | sim |
+| `frida`   | companion opcional no attach: `--bypass` carrega antiroot, antidebug e ssl pinning; `--script` aceita esses nomes ou um `.js`; log filtrado em `.jdt/<pkg>/frida/AAAA-MM-DD.log`; follow no stderr; `-d` só grava o arquivo; SIGTERM fecha o app e mata o CLI, sem derrubar `frida-server` | não | sim |
 | `android` | shell-out p/ Android CLI se estiver no PATH | detect + `run --debug` | emulator, layout |
 | `logging` | linha humana `HH:MM:SS [ok\|skip] [módulo] ação`; só este pacote importa a lib de log | sim | — |
 
@@ -188,7 +188,7 @@ Inclui:
 
 4. PID certo: processo default vs `:remote` / isolated; flag `--process`.
 
-5. `jdt attach --bypass` / `--script` / `-d`: companion Frida depois do forward. JDWP continua no centro. Não existe `--unpin`. O server em `/data/local/tmp/frida-server` sobe com `su` se estiver parado; o `jdt` não baixa o binário. Scripts embutidos não contornam Play Integrity.
+5. `jdt attach --bypass` / `--script` / `-d`: companion Frida depois do forward. JDWP continua no centro. Não existe `--unpin`. O server em `/data/local/tmp/frida-server` sobe com `su` se estiver parado; o `jdt` não baixa o binário. Scripts embutidos não contornam Play Integrity. O processo segue esperando o debugger. `Java.perform` do script roda em `Application.attach`, depois do resume e antes de `onCreate` — `handleBindApplication` já está na stack durante o wait, e o gancho do bridge nessa função não vê essa chamada. SIGINT/SIGTERM mata o CLI (ou o `frida-session` no `-d`) e fecha o app; o server continua.
 
 6. Saúde do attach: timeout, “waiting for debugger”, re-forward se o processo morrer.
 
